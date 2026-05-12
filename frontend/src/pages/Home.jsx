@@ -1,10 +1,11 @@
-import { useState, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useRef, useEffect } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import ExplainCard from '../components/ExplainCard'
 import StyleTabs from '../components/StyleTabs'
+import SocraticChat from '../components/SocraticChat'
 import useAuthStore from '../store/useAuthStore'
 
 const STYLES = [
@@ -15,36 +16,46 @@ const STYLES = [
 
 const DIFFICULTY_LABELS = ['', 'Beginner', 'Basic', 'Intermediate', 'Advanced', 'Expert']
 
+const MODE_SINGLE = 'single'
+const MODE_MULTI = 'multi'
+const MODE_SOCRATIC = 'socratic'
+
 export default function Home() {
   const user = useAuthStore((s) => s.user)
-  const [topic, setTopic] = useState('')
+  const location = useLocation()
+  const [topic, setTopic] = useState(location.state?.prefillTopic || '')
   const [style, setStyle] = useState('analogy')
   const [difficulty, setDifficulty] = useState(2)
-  const [multiMode, setMultiMode] = useState(false)
+  const [mode, setMode] = useState(MODE_SINGLE)
   const [displayTime, setDisplayTime] = useState(null)
   const [recording, setRecording] = useState(false)
   const mediaRecorderRef = useRef(null)
   const chunksRef = useRef([])
 
+  // Prefill topic from recommendation navigation
+  useEffect(() => {
+    if (location.state?.prefillTopic) {
+      setTopic(location.state.prefillTopic)
+      window.history.replaceState({}, '')
+    }
+  }, [location.state])
+
   const singleMutation = useMutation({
     mutationFn: (data) => api.post('/explain/generate', data).then((r) => r.data),
     onSuccess: () => setDisplayTime(new Date().toISOString()),
-    onError: (err) => {
-      const msg = err.response?.data?.detail || 'Something went wrong. Please try again.'
-      toast.error(msg)
-    },
+    onError: (err) => toast.error(err.response?.data?.detail || 'Something went wrong. Please try again.'),
   })
 
   const multiMutation = useMutation({
     mutationFn: (data) => api.post('/explain/multi-style', data).then((r) => r.data),
     onSuccess: () => setDisplayTime(new Date().toISOString()),
-    onError: (err) => {
-      const msg = err.response?.data?.detail || 'Something went wrong. Please try again.'
-      toast.error(msg)
-    },
+    onError: (err) => toast.error(err.response?.data?.detail || 'Something went wrong. Please try again.'),
   })
 
-  const mutation = multiMode ? multiMutation : singleMutation
+  const socraticMutation = useMutation({
+    mutationFn: (data) => api.post('/explain/socratic', data).then((r) => r.data),
+    onError: (err) => toast.error(err.response?.data?.detail || 'Something went wrong. Please try again.'),
+  })
 
   const handleVoice = async () => {
     if (recording) {
@@ -85,12 +96,20 @@ export default function Home() {
       toast.error('Please enter a topic')
       return
     }
-    if (multiMode) {
+    if (mode === MODE_MULTI) {
       multiMutation.mutate({ topic: topic.trim(), difficulty })
+    } else if (mode === MODE_SOCRATIC) {
+      if (!user) {
+        toast.error('Sign in to use Socratic mode')
+        return
+      }
+      socraticMutation.mutate({ topic: topic.trim(), difficulty })
     } else {
       singleMutation.mutate({ topic: topic.trim(), style, difficulty })
     }
   }
+
+  const isPending = singleMutation.isPending || multiMutation.isPending || socraticMutation.isPending
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50">
@@ -123,24 +142,23 @@ export default function Home() {
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
           {/* Mode toggle */}
           <div className="flex items-center gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit">
-            <button
-              type="button"
-              onClick={() => setMultiMode(false)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                !multiMode ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Single style
-            </button>
-            <button
-              type="button"
-              onClick={() => setMultiMode(true)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                multiMode ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Compare all 3
-            </button>
+            {[
+              { id: MODE_SINGLE, label: 'Single style' },
+              { id: MODE_MULTI, label: 'Compare all 3' },
+              { id: MODE_SOCRATIC, label: '🔦 Socratic', tip: user ? '' : 'Sign in to use' },
+            ].map(({ id, label, tip }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setMode(id)}
+                title={tip}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  mode === id ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
           {/* Topic input */}
@@ -176,8 +194,8 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Style selector — hidden in multi mode */}
-          {!multiMode && (
+          {/* Style selector — single mode only */}
+          {mode === MODE_SINGLE && (
             <div className="mb-6">
               <label className="block text-sm font-semibold text-gray-700 mb-3">
                 Explanation style
@@ -205,10 +223,18 @@ export default function Home() {
             </div>
           )}
 
-          {multiMode && (
+          {mode === MODE_MULTI && (
             <div className="mb-6 p-3.5 bg-indigo-50 border border-indigo-100 rounded-xl text-sm text-indigo-700">
               Generates all 3 styles simultaneously so you can compare and rate each one.
               Your ratings carry extra weight since you saw all options.
+            </div>
+          )}
+
+          {mode === MODE_SOCRATIC && (
+            <div className="mb-6 p-3.5 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-800">
+              <strong>Socratic mode</strong> — instead of receiving an explanation, you'll be guided
+              through a series of questions to discover the concept yourself.
+              {!user && <span className="block mt-1 text-amber-600 font-medium">Requires sign-in.</span>}
             </div>
           )}
 
@@ -238,30 +264,30 @@ export default function Home() {
           {/* Submit */}
           <button
             type="submit"
-            disabled={mutation.isPending}
+            disabled={isPending}
             className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold py-3.5 rounded-xl transition-all text-base flex items-center justify-center gap-2"
           >
-            {mutation.isPending ? (
+            {isPending ? (
               <>
                 <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                {multiMode ? 'Generating all 3 styles...' : 'Generating explanation...'}
+                {mode === MODE_MULTI ? 'Generating all 3 styles...' : mode === MODE_SOCRATIC ? 'Starting session...' : 'Generating explanation...'}
               </>
             ) : (
               <>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                {multiMode ? 'Compare all 3 styles' : 'Explain this to me'}
+                {mode === MODE_MULTI ? 'Compare all 3 styles' : mode === MODE_SOCRATIC ? 'Start Socratic session' : 'Explain this to me'}
               </>
             )}
           </button>
         </form>
 
         {/* Single result */}
-        {!multiMode && singleMutation.isSuccess && singleMutation.data && (
+        {mode === MODE_SINGLE && singleMutation.isSuccess && singleMutation.data && (
           <div className="animate-fade-in">
             <ExplainCard
               explanation={singleMutation.data.explanation}
@@ -270,17 +296,29 @@ export default function Home() {
               topic={singleMutation.data.topic}
               historyId={singleMutation.data.history_id}
               displayTimeUtc={displayTime}
+              quality={singleMutation.data.quality}
             />
           </div>
         )}
 
         {/* Multi-style result */}
-        {multiMode && multiMutation.isSuccess && multiMutation.data && (
+        {mode === MODE_MULTI && multiMutation.isSuccess && multiMutation.data && (
           <div className="animate-fade-in">
             <StyleTabs
               data={multiMutation.data}
               displayTimeUtc={displayTime}
               topic={topic}
+            />
+          </div>
+        )}
+
+        {/* Socratic result */}
+        {mode === MODE_SOCRATIC && socraticMutation.isSuccess && socraticMutation.data && (
+          <div className="animate-fade-in">
+            <SocraticChat
+              openingQuestion={socraticMutation.data.opening_question}
+              historyId={socraticMutation.data.history_id}
+              topic={socraticMutation.data.topic}
             />
           </div>
         )}

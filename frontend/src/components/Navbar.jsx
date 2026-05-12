@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 import useAuthStore from '../store/useAuthStore'
@@ -9,6 +9,15 @@ export default function Navbar() {
   const user = useAuthStore((s) => s.user)
   const refreshToken = useAuthStore((s) => s.refreshToken)
   const clearAuth = useAuthStore((s) => s.clearAuth)
+
+  const { data: profileData } = useQuery({
+    queryKey: ['profile-navbar'],
+    queryFn: () => api.get('/profile').then((r) => r.data),
+    enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const spacedRepDue = profileData?.spaced_rep_due ?? 0
 
   const logoutMutation = useMutation({
     mutationFn: () => api.post('/auth/logout', { refresh_token: refreshToken }),
@@ -40,10 +49,17 @@ export default function Navbar() {
               </Link>
               <Link
                 to="/profile"
-                className="text-sm text-gray-600 hover:text-gray-900 font-medium flex items-center gap-1.5"
+                className="text-sm text-gray-600 hover:text-gray-900 font-medium flex items-center gap-1.5 relative"
               >
-                <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">
-                  {user.name?.[0]?.toUpperCase()}
+                <div className="relative">
+                  <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">
+                    {user.name?.[0]?.toUpperCase()}
+                  </div>
+                  {spacedRepDue > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
+                      {spacedRepDue > 9 ? '9+' : spacedRepDue}
+                    </span>
+                  )}
                 </div>
                 {user.name}
               </Link>
