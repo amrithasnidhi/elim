@@ -18,7 +18,7 @@ const STYLE_COLORS = {
   'code-based': 'bg-green-100 text-green-700',
 }
 
-export default function ExplainCard({ explanation, followup, style, topic, historyId, displayTimeUtc }) {
+export default function ExplainCard({ explanation, followup, style, topic, historyId, displayTimeUtc, quality }) {
   const user = useAuthStore((s) => s.user)
   const [copied, setCopied] = useState(false)
   const [updatedWeights, setUpdatedWeights] = useState(null)
@@ -43,6 +43,18 @@ export default function ExplainCard({ explanation, followup, style, topic, histo
             {STYLE_LABELS[style]}
           </span>
         </div>
+        {quality?.avg && (
+          <span
+            title={`Quality: clarity ${quality.clarity}/5, accuracy ${quality.accuracy}/5, style ${quality.style_fit}/5`}
+            className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+              quality.avg >= 4 ? 'bg-green-100 text-green-700' :
+              quality.avg >= 3 ? 'bg-yellow-100 text-yellow-700' :
+              'bg-red-100 text-red-700'
+            }`}
+          >
+            Q {quality.avg.toFixed(1)}
+          </span>
+        )}
         <button
           onClick={handleCopy}
           className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-100 flex-shrink-0"

@@ -11,7 +11,7 @@ from routers import explain, auth, profile, feedback, mcp, voice
 load_dotenv()
 
 # Sentry — no-op if SENTRY_DSN is not set
-_sentry_dsn = os.getenv("SENTRY_DSN", "")
+_sentry_dsn = os.getenv("SENTRY_DSN_BACKEND", "")
 if _sentry_dsn:
     import sentry_sdk
     from sentry_sdk.integrations.fastapi import FastApiIntegration

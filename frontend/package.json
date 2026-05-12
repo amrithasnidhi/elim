@@ -19,7 +19,8 @@
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.15.0",
     "tailwindcss": "^4.3.0",
-    "zustand": "^5.0.13"
+    "zustand": "^5.0.13",
+    "@sentry/react": "^8.45.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
