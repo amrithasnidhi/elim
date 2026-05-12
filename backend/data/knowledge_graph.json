@@ -1,0 +1,197 @@
+{
+  "variables and data types": {
+    "prerequisites": [],
+    "next_topics": ["control flow", "functions", "arrays"],
+    "related": ["operators", "expressions", "type casting"]
+  },
+  "control flow": {
+    "prerequisites": ["variables and data types"],
+    "next_topics": ["functions", "loops", "recursion"],
+    "related": ["boolean logic", "switch statements", "ternary operator"]
+  },
+  "functions": {
+    "prerequisites": ["variables and data types", "control flow"],
+    "next_topics": ["recursion", "higher-order functions", "closures"],
+    "related": ["scope", "parameters", "return values"]
+  },
+  "recursion": {
+    "prerequisites": ["functions", "control flow"],
+    "next_topics": ["dynamic programming", "divide and conquer", "tree traversal"],
+    "related": ["stack overflow", "memoization", "tail recursion"]
+  },
+  "arrays": {
+    "prerequisites": ["variables and data types"],
+    "next_topics": ["sorting algorithms", "binary search", "dynamic arrays", "hash tables"],
+    "related": ["linked lists", "stacks", "queues", "strings"]
+  },
+  "sorting algorithms": {
+    "prerequisites": ["arrays", "control flow"],
+    "next_topics": ["binary search", "merge sort", "quicksort"],
+    "related": ["big-o notation", "comparison sorting", "radix sort"]
+  },
+  "binary search": {
+    "prerequisites": ["arrays", "sorting algorithms"],
+    "next_topics": ["binary search tree", "interval tree", "ternary search"],
+    "related": ["linear search", "divide and conquer", "logarithmic complexity"]
+  },
+  "linked lists": {
+    "prerequisites": ["arrays", "pointers"],
+    "next_topics": ["stacks", "queues", "doubly linked list", "skip list"],
+    "related": ["arrays", "memory management", "nodes and pointers"]
+  },
+  "stacks": {
+    "prerequisites": ["arrays", "linked lists"],
+    "next_topics": ["depth-first search", "expression parsing", "backtracking"],
+    "related": ["queues", "call stack", "postfix notation"]
+  },
+  "queues": {
+    "prerequisites": ["arrays", "linked lists"],
+    "next_topics": ["breadth-first search", "priority queue", "deque"],
+    "related": ["stacks", "circular buffer", "message queues"]
+  },
+  "hash tables": {
+    "prerequisites": ["arrays", "hash functions"],
+    "next_topics": ["hash maps", "sets", "bloom filters", "consistent hashing"],
+    "related": ["collision handling", "load factor", "open addressing"]
+  },
+  "trees": {
+    "prerequisites": ["recursion", "linked lists"],
+    "next_topics": ["binary search tree", "heap", "trie", "segment tree"],
+    "related": ["depth-first search", "breadth-first search", "tree traversal"]
+  },
+  "binary search tree": {
+    "prerequisites": ["trees", "binary search"],
+    "next_topics": ["avl tree", "red-black tree", "b-tree"],
+    "related": ["in-order traversal", "balanced trees", "self-balancing trees"]
+  },
+  "graphs": {
+    "prerequisites": ["arrays", "queues", "stacks"],
+    "next_topics": ["depth-first search", "breadth-first search", "dijkstra's algorithm", "minimum spanning tree"],
+    "related": ["adjacency matrix", "adjacency list", "directed vs undirected"]
+  },
+  "depth-first search": {
+    "prerequisites": ["graphs", "stacks", "recursion"],
+    "next_topics": ["topological sort", "strongly connected components", "cycle detection"],
+    "related": ["breadth-first search", "backtracking", "maze solving"]
+  },
+  "breadth-first search": {
+    "prerequisites": ["graphs", "queues"],
+    "next_topics": ["shortest path", "level-order traversal", "bidirectional search"],
+    "related": ["depth-first search", "dijkstra's algorithm", "flood fill"]
+  },
+  "dynamic programming": {
+    "prerequisites": ["recursion", "memoization"],
+    "next_topics": ["longest common subsequence", "knapsack problem", "matrix chain multiplication"],
+    "related": ["greedy algorithms", "divide and conquer", "optimal substructure"]
+  },
+  "big-o notation": {
+    "prerequisites": ["functions", "arrays"],
+    "next_topics": ["space complexity", "amortized analysis", "master theorem"],
+    "related": ["time complexity", "best/worst/average case", "asymptotic analysis"]
+  },
+  "object-oriented programming": {
+    "prerequisites": ["functions", "variables and data types"],
+    "next_topics": ["design patterns", "inheritance", "polymorphism", "solid principles"],
+    "related": ["encapsulation", "abstraction", "classes and objects"]
+  },
+  "design patterns": {
+    "prerequisites": ["object-oriented programming"],
+    "next_topics": ["microservices", "event-driven architecture", "domain-driven design"],
+    "related": ["singleton", "observer", "factory", "strategy pattern"]
+  },
+  "linear algebra": {
+    "prerequisites": ["variables and data types"],
+    "next_topics": ["neural networks", "principal component analysis", "computer graphics"],
+    "related": ["vectors", "matrices", "eigenvalues", "dot product"]
+  },
+  "probability and statistics": {
+    "prerequisites": ["linear algebra"],
+    "next_topics": ["bayesian inference", "machine learning", "hypothesis testing"],
+    "related": ["distributions", "expected value", "variance", "bayes theorem"]
+  },
+  "machine learning": {
+    "prerequisites": ["linear algebra", "probability and statistics", "gradient descent"],
+    "next_topics": ["neural networks", "random forests", "support vector machines", "feature engineering"],
+    "related": ["supervised learning", "unsupervised learning", "overfitting", "cross-validation"]
+  },
+  "gradient descent": {
+    "prerequisites": ["linear algebra", "calculus basics"],
+    "next_topics": ["neural networks", "adam optimizer", "learning rate scheduling"],
+    "related": ["loss functions", "backpropagation", "stochastic gradient descent"]
+  },
+  "neural networks": {
+    "prerequisites": ["machine learning", "gradient descent", "linear algebra"],
+    "next_topics": ["convolutional neural networks", "recurrent neural networks", "transformers"],
+    "related": ["activation functions", "backpropagation", "batch normalization"]
+  },
+  "transformers": {
+    "prerequisites": ["neural networks", "attention mechanism"],
+    "next_topics": ["bert", "gpt", "large language models", "fine-tuning"],
+    "related": ["self-attention", "positional encoding", "encoder-decoder", "tokenization"]
+  },
+  "large language models": {
+    "prerequisites": ["transformers", "natural language processing"],
+    "next_topics": ["prompt engineering", "retrieval-augmented generation", "fine-tuning", "agents"],
+    "related": ["emergent abilities", "in-context learning", "hallucination", "alignment"]
+  },
+  "retrieval-augmented generation": {
+    "prerequisites": ["large language models", "embeddings", "vector databases"],
+    "next_topics": ["agents", "knowledge graphs", "hybrid search"],
+    "related": ["semantic search", "chunking strategies", "reranking", "context window"]
+  },
+  "rest apis": {
+    "prerequisites": ["http", "json"],
+    "next_topics": ["graphql", "websockets", "microservices", "api authentication"],
+    "related": ["crud operations", "status codes", "request/response cycle", "openapi"]
+  },
+  "databases": {
+    "prerequisites": ["data structures"],
+    "next_topics": ["sql", "nosql", "indexing", "transactions", "database normalization"],
+    "related": ["acid properties", "query optimization", "replication", "sharding"]
+  },
+  "sql": {
+    "prerequisites": ["databases"],
+    "next_topics": ["query optimization", "joins", "stored procedures", "database normalization"],
+    "related": ["nosql", "orm", "transactions", "primary and foreign keys"]
+  },
+  "docker": {
+    "prerequisites": ["linux basics", "networking basics"],
+    "next_topics": ["kubernetes", "docker-compose", "container orchestration", "ci/cd"],
+    "related": ["virtual machines", "images vs containers", "dockerhub", "volumes"]
+  },
+  "git": {
+    "prerequisites": [],
+    "next_topics": ["github actions", "ci/cd", "branching strategies", "code review"],
+    "related": ["version control", "merge vs rebase", "git flow", "pull requests"]
+  },
+  "tcp/ip": {
+    "prerequisites": [],
+    "next_topics": ["http", "dns", "tls/ssl", "websockets"],
+    "related": ["osi model", "ip addresses", "ports", "packets"]
+  },
+  "http": {
+    "prerequisites": ["tcp/ip"],
+    "next_topics": ["rest apis", "http/2", "https", "caching"],
+    "related": ["request methods", "headers", "cookies", "status codes"]
+  },
+  "concurrency": {
+    "prerequisites": ["operating systems basics", "functions"],
+    "next_topics": ["parallelism", "async programming", "actor model", "lock-free data structures"],
+    "related": ["threads vs processes", "race conditions", "deadlocks", "mutex"]
+  },
+  "async programming": {
+    "prerequisites": ["concurrency", "functions"],
+    "next_topics": ["event loops", "promises", "reactive programming"],
+    "related": ["callbacks", "async/await", "non-blocking io", "coroutines"]
+  },
+  "system design": {
+    "prerequisites": ["databases", "rest apis", "caching", "message queues"],
+    "next_topics": ["distributed systems", "cap theorem", "consistent hashing"],
+    "related": ["scalability", "availability", "latency", "throughput"]
+  },
+  "caching": {
+    "prerequisites": ["databases", "hash tables"],
+    "next_topics": ["redis", "cdn", "cache invalidation strategies"],
+    "related": ["lru cache", "ttl", "write-through vs write-back", "cache stampede"]
+  }
+}
