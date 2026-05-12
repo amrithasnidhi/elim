@@ -1,11 +1,12 @@
 import os
 from celery import Celery
+from celery.schedules import crontab
 
 celery_app = Celery(
     "elim",
     broker=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
     backend=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-    include=["workers.indexing"],
+    include=["workers.indexing", "workers.tts", "workers.spaced_rep_worker", "workers.peer_matching"],
 )
 
 celery_app.conf.update(
@@ -16,4 +17,14 @@ celery_app.conf.update(
     enable_utc=True,
     task_track_started=True,
     result_expires=3600,
+    beat_schedule={
+        "spaced-rep-daily": {
+            "task": "workers.spaced_rep_worker.send_reminders",
+            "schedule": crontab(hour=8, minute=0),
+        },
+        "peer-matching-weekly": {
+            "task": "workers.peer_matching.run_peer_matching",
+            "schedule": crontab(day_of_week=1, hour=2, minute=0),
+        },
+    },
 )

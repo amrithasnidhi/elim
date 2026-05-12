@@ -30,6 +30,8 @@ DIFFICULTY_LABELS = {
 }
 
 ALL_STYLES = ["analogy", "step-by-step", "code-based"]
+MAX_QUALITY_RETRIES = 2
+QUALITY_THRESHOLD = 3.0
 
 
 def _argmax_style(weights: dict) -> str:
@@ -65,19 +67,38 @@ def _parse_response(raw: str, topic: str) -> tuple[str, str]:
 
 
 async def _call_llm(api_key: str, topic: str, style: str, difficulty: int, rag_context: str = "") -> dict:
-    """Single async LLM call for one style."""
+    """Single async LLM call. Scores quality with Haiku and retries once if avg < 3.0."""
     prompt = _build_prompt(topic, style, difficulty, rag_context)
-    try:
-        client = anthropic.AsyncAnthropic(api_key=api_key)
-        message = await client.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        explanation, followup = _parse_response(message.content[0].text, topic)
-        return {"style": style, "explanation": explanation, "followup": followup, "prompt": prompt, "error": None}
-    except Exception as e:
-        return {"style": style, "explanation": "", "followup": "", "prompt": prompt, "error": str(e)}
+
+    for attempt in range(MAX_QUALITY_RETRIES):
+        try:
+            client = anthropic.AsyncAnthropic(api_key=api_key)
+            message = await client.messages.create(
+                model="claude-sonnet-4-5",
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            explanation, followup = _parse_response(message.content[0].text, topic)
+
+            # Quality gate — Haiku scores clarity/accuracy/style_fit
+            from services.quality_scorer import score_explanation
+            quality = await score_explanation(api_key, topic, style, explanation)
+
+            if quality["avg"] >= QUALITY_THRESHOLD or attempt == MAX_QUALITY_RETRIES - 1:
+                return {
+                    "style": style,
+                    "explanation": explanation,
+                    "followup": followup,
+                    "prompt": prompt,
+                    "quality": quality,
+                    "error": None,
+                }
+            # Retry with a more explicit prompt nudge
+            prompt += f"\n\n[Previous attempt scored {quality['avg']:.1f}/5 — please improve clarity and depth.]"
+        except Exception as e:
+            return {"style": style, "explanation": "", "followup": "", "prompt": prompt, "quality": None, "error": str(e)}
+
+    return {"style": style, "explanation": "", "followup": "", "prompt": prompt, "quality": None, "error": "Max retries exceeded"}
 
 
 async def _save_history(
@@ -91,6 +112,7 @@ async def _save_history(
     multi_style: bool = False,
     mcp_sources_used: list = None,
     rag_chunks: list = None,
+    quality_scores: dict = None,
 ) -> str:
     now = datetime.now(timezone.utc)
     result = await db.history.insert_one({
@@ -104,6 +126,7 @@ async def _save_history(
         "audio_url": None,
         "mcp_sources_used": mcp_sources_used or [],
         "rag_chunks": rag_chunks or [],
+        "quality_scores": quality_scores,
         "feedback_score": 0,
         "star_rating": None,
         "time_to_rate_sec": None,
@@ -127,6 +150,7 @@ class ExplainResponse(BaseModel):
     style: str
     topic: str
     history_id: Optional[str] = None
+    quality: Optional[dict] = None
 
 
 class StyleResult(BaseModel):
@@ -147,11 +171,7 @@ class MultiStyleResponse(BaseModel):
 # ── MCP context helper ───────────────────────────────────────────────────────
 
 async def _load_mcp_context(user: dict, topic: str) -> tuple[str, list[str], list[dict]]:
-    """Returns (context_string, sources_used, raw_chunks). Never raises.
-
-    Prefers ChromaDB semantic search (Phase 6) when content is indexed;
-    falls back to live MCP query (Phase 5) otherwise.
-    """
+    """Returns (context_string, sources_used, raw_chunks). Never raises."""
     enabled: list = user.get("enabled_mcp_sources", [])
     if not enabled:
         return "", [], []
@@ -160,7 +180,6 @@ async def _load_mcp_context(user: dict, topic: str) -> tuple[str, list[str], lis
     doc_counts: dict = user.get("mcp_doc_counts", {})
     has_indexed = any(doc_counts.get(s, 0) > 0 for s in enabled if s != "web")
 
-    # ── Phase 6 path: semantic search over pre-indexed ChromaDB ──────────────
     if has_indexed:
         pipeline = get_rag_pipeline()
         if pipeline:
@@ -173,7 +192,6 @@ async def _load_mcp_context(user: dict, topic: str) -> tuple[str, list[str], lis
             except Exception:
                 pass
 
-    # ── Phase 5 fallback: live MCP query ─────────────────────────────────────
     tokens: dict = user.get("mcp_tokens", {})
     try:
         mgr = MCPManager(enabled, tokens)
@@ -228,6 +246,7 @@ async def generate_explanation(
             result["prompt"], result["explanation"],
             mcp_sources_used=mcp_sources,
             rag_chunks=[{"text": c["text"][:400], "source": c["source"]} for c in rag_chunks],
+            quality_scores=result.get("quality"),
         )
         await db.users.update_one(
             {"_id": ObjectId(user_id)},
@@ -243,6 +262,7 @@ async def generate_explanation(
         style=effective_style,
         topic=body.topic,
         history_id=history_id,
+        quality=result.get("quality"),
     )
 
 
@@ -270,14 +290,12 @@ async def multi_style_explanation(
     if user:
         rag_context, mcp_sources, rag_chunks = await _load_mcp_context(user, body.topic)
 
-    # Fire all 3 style calls in parallel (shared MCP context)
     tasks = [_call_llm(api_key, body.topic, s, effective_difficulty, rag_context) for s in ALL_STYLES]
     results = await asyncio.gather(*tasks)
 
     by_style = {r["style"]: r for r in results}
     stored_chunks = [{"text": c["text"][:400], "source": c["source"]} for c in rag_chunks]
 
-    # Save each to history (also parallel)
     history_ids: dict[str, Optional[str]] = {s: None for s in ALL_STYLES}
     if user_id:
         save_tasks = [
@@ -287,6 +305,7 @@ async def multi_style_explanation(
                 multi_style=True,
                 mcp_sources_used=mcp_sources,
                 rag_chunks=stored_chunks,
+                quality_scores=by_style[s].get("quality"),
             )
             for s in ALL_STYLES if not by_style[s]["error"]
         ]
@@ -338,7 +357,6 @@ async def request_audio(body: AudioRequest, user_id: str = Depends(get_current_u
     if str(history["user_id"]) != user_id:
         raise HTTPException(status_code=403, detail="Not your history")
 
-    # Return cached URL immediately if already generated
     if history.get("audio_url"):
         return {"audio_url": history["audio_url"], "job_id": None}
 
@@ -385,7 +403,6 @@ async def generate_diagram(body: DiagramRequest, user_id: str = Depends(get_curr
     if str(history["user_id"]) != user_id:
         raise HTTPException(status_code=403, detail="Not your history")
 
-    # Return cached diagram if already generated
     if history.get("diagram_code"):
         return {"diagram_code": history["diagram_code"]}
 
@@ -410,7 +427,6 @@ Rules:
     )
     raw = message.content[0].text.strip()
 
-    # Strip any accidental markdown fences
     if raw.startswith("```"):
         lines = raw.splitlines()
         raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
@@ -425,9 +441,9 @@ Rules:
 
 # ── Follow-up chat ────────────────────────────────────────────────────────────
 
-_chat_fallback: dict[str, list] = {}   # in-memory fallback when Redis unavailable
-CHAT_TTL = 7200                         # 2-hour TTL in Redis
-MAX_TURNS = 5                           # keep last 5 user/assistant pairs
+_chat_fallback: dict[str, list] = {}
+CHAT_TTL = 7200
+MAX_TURNS = 5
 
 
 async def _get_redis():
@@ -458,8 +474,8 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 
     chat_key = f"chat:{body.history_id}"
+    is_socratic = history.get("style_used") == "socratic"
 
-    # Load conversation from Redis or in-memory fallback
     r = await _get_redis()
     conversation: list = []
     try:
@@ -472,17 +488,42 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
     except Exception:
         conversation = []
 
-    # Trim to MAX_TURNS pairs
     if len(conversation) > MAX_TURNS * 2:
         conversation = conversation[-(MAX_TURNS * 2):]
 
     topic = history["topic"]
-    system = (
-        f"You are a helpful tutor. The student just read this explanation of \"{topic}\":\n\n"
-        f"---\n{history['explanation'][:2000]}\n---\n\n"
-        f"Answer their follow-up questions concisely (2–4 sentences). "
-        f"If the question is unrelated, gently redirect them back to \"{topic}\"."
-    )
+
+    # Detect confusion — if highly confused, instruct the AI to re-explain simply
+    confusion_note = ""
+    try:
+        from services.confusion_detector import detect_confusion
+        confusion = await detect_confusion(api_key, topic, body.question)
+        if confusion.get("confusion_score", 0) > 0.7:
+            confusion_note = (
+                "\n\nIMPORTANT: The student appears confused. Re-explain the relevant part "
+                "from scratch using a simpler analogy. Do NOT just repeat the same explanation."
+            )
+    except Exception:
+        pass
+
+    if is_socratic:
+        system = (
+            f'You are a Socratic tutor guiding the student to discover "{topic}" through questions.\n'
+            f"Rules:\n"
+            f"- Ask ONE guiding question at a time — never give the answer directly\n"
+            f"- If the student is on the right track, praise briefly and ask a deeper question\n"
+            f"- If the student is wrong, give a gentle hint and ask again\n"
+            f"- After 5 correct turns, give a short confirming summary of the concept\n"
+            f"{confusion_note}"
+        )
+    else:
+        system = (
+            f"You are a helpful tutor. The student just read this explanation of \"{topic}\":\n\n"
+            f"---\n{history['explanation'][:2000]}\n---\n\n"
+            f"Answer their follow-up questions concisely (2–4 sentences). "
+            f"If the question is unrelated, gently redirect them back to \"{topic}\"."
+            f"{confusion_note}"
+        )
 
     messages = conversation + [{"role": "user", "content": body.question}]
 
@@ -495,7 +536,6 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
     )
     reply = response.content[0].text.strip()
 
-    # Update and persist conversation
     conversation.append({"role": "user", "content": body.question})
     conversation.append({"role": "assistant", "content": reply})
     try:
@@ -507,3 +547,63 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
         _chat_fallback[chat_key] = conversation
 
     return {"reply": reply, "turn": len(conversation) // 2}
+
+
+# ── Socratic mode ─────────────────────────────────────────────────────────────
+
+class SocraticRequest(BaseModel):
+    topic: str = Field(..., min_length=1, max_length=500)
+    difficulty: Optional[int] = Field(default=2, ge=1, le=5)
+
+
+@router.post("/socratic")
+async def start_socratic(body: SocraticRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Begin a Socratic learning session. Returns an opening question and a session history_id
+    that can be used with POST /explain/followup to continue the Socratic dialogue.
+    """
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+
+    prompt = (
+        f'You are starting a Socratic learning session on the topic: "{body.topic}".\n'
+        f"The student is at difficulty level {body.difficulty}/5.\n\n"
+        f"Generate ONE opening Socratic question that:\n"
+        f"- Probes what the student already knows\n"
+        f"- Is open-ended and thought-provoking\n"
+        f"- Does NOT give away any part of the answer\n\n"
+        f"Return ONLY the question — no preamble, no explanation."
+    )
+
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+    message = await client.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=200,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    opening_question = message.content[0].text.strip()
+
+    db = get_db()
+    history_id = await _save_history(
+        db, user_id, body.topic, "socratic", body.difficulty or 2,
+        prompt, "",
+    )
+
+    # Seed the chat context with the opening question as assistant turn
+    chat_key = f"chat:{history_id}"
+    seed = [{"role": "assistant", "content": opening_question}]
+    r = await _get_redis()
+    try:
+        if r:
+            await r.setex(chat_key, CHAT_TTL, json.dumps(seed))
+        else:
+            _chat_fallback[chat_key] = seed
+    except Exception:
+        _chat_fallback[chat_key] = seed
+
+    return {
+        "opening_question": opening_question,
+        "history_id": history_id,
+        "topic": body.topic,
+    }

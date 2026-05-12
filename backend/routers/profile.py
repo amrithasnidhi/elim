@@ -1,3 +1,4 @@
+import difflib
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
 from bson import ObjectId
@@ -26,6 +27,8 @@ def _serialize_user(user: dict) -> dict:
         "style_weights": user["style_weights"],
         "topic_history": user.get("topic_history", []),
         "enabled_mcp_sources": user.get("enabled_mcp_sources", []),
+        "spaced_rep_due": user.get("spaced_rep_due", 0),
+        "cluster_id": user.get("cluster_id"),
         "created_at": user["created_at"].isoformat() if user.get("created_at") else None,
         "last_active": user["last_active"].isoformat() if user.get("last_active") else None,
     }
@@ -83,6 +86,7 @@ async def get_history(
             "feedback_score": doc.get("feedback_score", 0),
             "star_rating": doc.get("star_rating"),
             "time_to_rate_sec": doc.get("time_to_rate_sec"),
+            "quality_scores": doc.get("quality_scores"),
             "created_at": doc["created_at"].isoformat() if doc.get("created_at") else None,
         })
 
@@ -111,3 +115,110 @@ async def delete_history(history_id: str, user_id: str = Depends(get_current_use
 
     await db.history.delete_one({"_id": oid})
     return {"deleted": True}
+
+
+# ── Spaced Repetition ─────────────────────────────────────────────────────────
+
+@router.get("/spaced-rep")
+async def get_spaced_rep(user_id: str = Depends(get_current_user_id)):
+    """Return topics due for review today (SM-2 schedule)."""
+    from services.spaced_rep import get_due_items
+    db = get_db()
+    items = await get_due_items(db, user_id)
+    # Clear the cached due count now that the user has seen the list
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"spaced_rep_due": len(items)}},
+    )
+    return {"items": items, "count": len(items)}
+
+
+# ── Concept Dependency Graph ──────────────────────────────────────────────────
+
+@router.get("/dependencies")
+async def concept_dependencies(
+    topic: str = Query(..., min_length=1),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Return prerequisite / next / related topics for a concept from the knowledge graph."""
+    from services.dependency_graph import get_node
+    node = get_node(topic)
+
+    db = get_db()
+    user = await db.users.find_one({"_id": ObjectId(user_id)}, {"topic_history": 1})
+    explored = set(t.lower() for t in user.get("topic_history", [])) if user else set()
+
+    def _annotate(topics: list) -> list:
+        return [{"topic": t, "explored": t.lower() in explored} for t in topics]
+
+    return {
+        "topic": topic,
+        "prerequisites": _annotate(node["prerequisites"]),
+        "next_topics": _annotate(node["next_topics"]),
+        "related": _annotate(node["related"]),
+    }
+
+
+# ── Explanation Diff ──────────────────────────────────────────────────────────
+
+@router.get("/history/diff")
+async def history_diff(
+    h1: str = Query(..., description="First history_id"),
+    h2: str = Query(..., description="Second history_id"),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Unified diff of two explanation versions for the same (or different) topic."""
+    db = get_db()
+    try:
+        oid1, oid2 = ObjectId(h1), ObjectId(h2)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid history_id")
+
+    hist1, hist2 = await asyncio.gather(
+        db.history.find_one({"_id": oid1}),
+        db.history.find_one({"_id": oid2}),
+    )
+
+    for hist, label in [(hist1, "h1"), (hist2, "h2")]:
+        if not hist:
+            raise HTTPException(status_code=404, detail=f"{label} not found")
+        if str(hist["user_id"]) != user_id:
+            raise HTTPException(status_code=403, detail=f"Not your history entry ({label})")
+
+    diff_lines = list(difflib.unified_diff(
+        hist1["explanation"].splitlines(),
+        hist2["explanation"].splitlines(),
+        fromfile=f"Version 1 · {hist1['style_used']} · {hist1['created_at'].strftime('%Y-%m-%d')}",
+        tofile=f"Version 2 · {hist2['style_used']} · {hist2['created_at'].strftime('%Y-%m-%d')}",
+        lineterm="",
+    ))
+
+    return {
+        "diff": diff_lines,
+        "h1": {
+            "id": h1, "topic": hist1["topic"], "style_used": hist1["style_used"],
+            "created_at": hist1["created_at"].isoformat(),
+        },
+        "h2": {
+            "id": h2, "topic": hist2["topic"], "style_used": hist2["style_used"],
+            "created_at": hist2["created_at"].isoformat(),
+        },
+    }
+
+
+# ── Topic Recommendations ─────────────────────────────────────────────────────
+
+@router.get("/recommendations")
+async def topic_recommendations(
+    limit: int = Query(default=6, ge=1, le=20),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Return personalised topic recommendations based on learning history and cluster peers."""
+    from services.topic_recommender import get_recommendations
+    db = get_db()
+    recs = await get_recommendations(db, user_id, limit=limit)
+    return {"recommendations": recs}
+
+
+# asyncio needed for history_diff gather
+import asyncio

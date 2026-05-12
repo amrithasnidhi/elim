@@ -26,24 +26,21 @@ async def update_style_weights(db, user_id: str, style: str, score: int,
 
     weights = dict(user.get("style_weights", {"analogy": 0.33, "step-by-step": 0.33, "code-based": 0.34}))
 
-    # Determine signal strength
     signal = float(score)
     signal_strength = 1.0
     if time_to_rate_sec < 10 and score > 0:
-        signal_strength = 1.2  # fast positive = high confidence
+        signal_strength = 1.2
     if multi_style:
-        signal_strength *= 2.0  # user saw all 3 styles and chose — higher confidence
+        signal_strength *= 2.0
 
     if style not in weights:
         weights[style] = 0.33
 
     weights[style] = (0.8 * weights[style]) + (0.2 * signal * signal_strength)
 
-    # Clamp to avoid negative weights
     for k in weights:
         weights[k] = max(0.01, weights[k])
 
-    # Normalise so all weights sum to exactly 1.0
     total = sum(weights.values())
     weights = {k: round(v / total, 6) for k, v in weights.items()}
 
@@ -69,12 +66,8 @@ async def rate_explanation(body: RateRequest, user_id: str = Depends(get_current
     if str(history["user_id"]) != user_id:
         raise HTTPException(status_code=403, detail="Not your history entry")
 
-    # Compute time_to_rate_sec
     try:
         display_time = datetime.fromisoformat(body.display_time_utc.replace("Z", "+00:00"))
-        created_at = history["created_at"]
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
         time_to_rate_sec = max(0.0, (datetime.now(timezone.utc) - display_time).total_seconds())
     except Exception:
         time_to_rate_sec = 30.0
@@ -88,14 +81,34 @@ async def rate_explanation(body: RateRequest, user_id: str = Depends(get_current
         }},
     )
 
-    # Use multi_style flag from body, or detect from history document
     is_multi = body.multi_style or history.get("multi_style", False)
-
     updated_weights = await update_style_weights(
         db, user_id, history["style_used"], body.score, time_to_rate_sec, multi_style=is_multi
     )
 
-    return {"updated_weights": updated_weights, "time_to_rate_sec": time_to_rate_sec}
+    # Pace Detector — auto-adjust difficulty based on rolling avg rating speed
+    pace_result = None
+    try:
+        from services.pace_detector import run_pace_detector
+        pace_result = await run_pace_detector(db, user_id, time_to_rate_sec)
+    except Exception:
+        pass
+
+    # Spaced Repetition — record review using SM-2 (score>0 ⟹ recalled, else forgot)
+    sr_result = None
+    try:
+        from services.spaced_rep import record_review
+        sr_score = 1 if body.score >= 0 else 0
+        sr_result = await record_review(db, user_id, body.history_id, sr_score)
+    except Exception:
+        pass
+
+    return {
+        "updated_weights": updated_weights,
+        "time_to_rate_sec": time_to_rate_sec,
+        "pace": pace_result,
+        "spaced_rep": sr_result,
+    }
 
 
 @router.get("/summary")
