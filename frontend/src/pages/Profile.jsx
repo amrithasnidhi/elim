@@ -7,14 +7,38 @@ import useAuthStore from '../store/useAuthStore'
 import DepGraph from '../components/DepGraph'
 import DiffView from '../components/DiffView'
 import TopicRecommendations from '../components/TopicRecommendations'
+import Background from '../components/Background'
 
 const STYLE_META = {
-  'analogy': { label: 'Analogy', icon: '🧩', color: 'bg-purple-500' },
-  'step-by-step': { label: 'Step-by-Step', icon: '📋', color: 'bg-blue-500' },
-  'code-based': { label: 'Code-First', icon: '💻', color: 'bg-green-500' },
+  'analogy':      { label: 'ANALOGY',      color: 'var(--purple)', bar: 'rgba(124,110,240,0.8)' },
+  'step-by-step': { label: 'STEP-BY-STEP', color: 'var(--cyan)',   bar: 'rgba(0,229,255,0.8)' },
+  'code-based':   { label: 'CODE-FIRST',   color: 'var(--green)',  bar: 'rgba(0,255,157,0.8)' },
 }
 
-const DIFFICULTY_LABELS = ['', 'Beginner', 'Basic', 'Intermediate', 'Advanced', 'Expert']
+const DIFFICULTY_LABELS = ['', 'BEGINNER', 'BASIC', 'INTERMEDIATE', 'ADVANCED', 'EXPERT']
+
+function SectionCard({ title, subtitle, children, style: extraStyle = {} }) {
+  return (
+    <div className="cyber-panel" style={{ ...extraStyle }}>
+      <p style={{
+        fontFamily: "'Orbitron',monospace",
+        fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+        color: 'var(--cyan)', marginBottom: subtitle ? 2 : '1rem',
+      }}>
+        {title}
+      </p>
+      {subtitle && (
+        <p style={{
+          fontFamily: "'Share Tech Mono',monospace",
+          fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)', marginBottom: '1rem',
+        }}>
+          {subtitle}
+        </p>
+      )}
+      {children}
+    </div>
+  )
+}
 
 export default function Profile() {
   const navigate = useNavigate()
@@ -54,15 +78,20 @@ export default function Profile() {
     onSuccess: (data) => {
       qc.setQueryData(['profile'], data)
       updateUser(data)
-      toast.success('Preferences saved')
+      toast.success('PREFERENCES SAVED')
     },
-    onError: () => toast.error('Failed to save preferences'),
+    onError: () => toast.error('FAILED TO SAVE'),
   })
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 flex items-center justify-center">
-        <div className="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full" />
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{
+          width: 32, height: 32, borderRadius: '50%',
+          border: '2px solid rgba(0,229,255,0.1)',
+          borderTop: '2px solid var(--cyan)',
+          animation: 'spinCW 0.8s linear infinite',
+        }} />
       </div>
     )
   }
@@ -71,63 +100,120 @@ export default function Profile() {
   const historyItems = historyData?.items || []
   const topicSet = [...new Set(historyItems.map((h) => h.topic))]
 
+  const selectStyle = {
+    width: '100%',
+    background: 'rgba(0,229,255,0.03)',
+    border: '1px solid rgba(0,229,255,0.15)',
+    borderRadius: 2,
+    padding: '0.45rem 0.75rem',
+    color: 'var(--text)',
+    fontFamily: "'Share Tech Mono',monospace",
+    fontSize: 10,
+    outline: 'none',
+    cursor: 'pointer',
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50">
-      <div className="max-w-2xl mx-auto px-4 py-12 space-y-6">
+    <div style={{ minHeight: '100vh', position: 'relative' }}>
+      <Background />
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 680, margin: '0 auto', padding: '3rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
-          <p className="text-gray-500 mt-1">Your learning preferences and style evolution</p>
+          <h1 style={{
+            fontFamily: "'Orbitron',monospace",
+            fontSize: 18, fontWeight: 700, letterSpacing: '0.12em',
+            color: 'var(--cyan)',
+            textShadow: '0 0 20px rgba(0,229,255,0.3)',
+            marginBottom: 4,
+          }}>
+            OPERATOR_PROFILE
+          </h1>
+          <p style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 9, color: 'var(--dim)', letterSpacing: '0.1em' }}>
+            LEARNING PREFERENCES AND STYLE EVOLUTION
+          </p>
         </div>
 
         {/* User info */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xl">
+        <SectionCard title={null} subtitle={null} style={{ padding: '1.25rem 1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: '50%',
+              background: 'rgba(0,229,255,0.1)',
+              border: '1px solid rgba(0,229,255,0.4)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: "'Orbitron',monospace",
+              fontSize: 18, fontWeight: 700, color: 'var(--cyan)',
+              flexShrink: 0,
+            }}>
               {profile?.name?.[0]?.toUpperCase() || '?'}
             </div>
             <div>
-              <div className="font-semibold text-gray-900 text-lg">{profile?.name}</div>
-              <div className="text-gray-500 text-sm">{profile?.email}</div>
+              <p style={{
+                fontFamily: "'Orbitron',monospace",
+                fontSize: 13, fontWeight: 700, color: 'var(--text)',
+                letterSpacing: '0.08em', marginBottom: 2,
+              }}>
+                {profile?.name?.toUpperCase()}
+              </p>
+              <p style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 9, color: 'var(--sub)' }}>
+                {profile?.email}
+              </p>
               {profile?.last_active && (
-                <div className="text-xs text-gray-400 mt-0.5">
-                  Last active: {new Date(profile.last_active).toLocaleDateString()}
-                </div>
+                <p style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: 'var(--dim)', marginTop: 2 }}>
+                  LAST_ACTIVE: {new Date(profile.last_active).toLocaleDateString()}
+                </p>
               )}
             </div>
           </div>
-        </div>
+        </SectionCard>
 
         {/* Spaced Repetition */}
         {spacedRep && spacedRep.count > 0 && (
-          <div className="bg-orange-50 rounded-2xl border border-orange-100 p-6">
-            <div className="flex items-center gap-2 mb-3">
-              <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <div style={{
+            background: 'rgba(245,166,35,0.04)',
+            border: '1px solid rgba(245,166,35,0.25)',
+            borderRadius: 2, padding: '1.25rem 1.5rem',
+            position: 'relative',
+          }}>
+            <div style={{ position: 'absolute', top: -1, left: -1, width: 12, height: 12, borderTop: '2px solid rgba(245,166,35,0.7)', borderLeft: '2px solid rgba(245,166,35,0.7)' }} />
+            <div style={{ position: 'absolute', bottom: -1, right: -1, width: 12, height: 12, borderBottom: '2px solid rgba(245,166,35,0.7)', borderRight: '2px solid rgba(245,166,35,0.7)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.75rem' }}>
+              <svg width="14" height="14" fill="none" stroke="var(--amber)" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <h2 className="font-semibold text-orange-900 text-base">
-                Review Due — {spacedRep.count} topic{spacedRep.count !== 1 ? 's' : ''}
-              </h2>
+              <p style={{
+                fontFamily: "'Orbitron',monospace",
+                fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: 'var(--amber)',
+              }}>
+                REVIEW_DUE — {spacedRep.count} TOPIC{spacedRep.count !== 1 ? 'S' : ''}
+              </p>
             </div>
-            <div className="space-y-2">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {spacedRep.items.slice(0, 5).map((item) => (
-                <div key={item.topic} className="flex items-center justify-between">
+                <div key={item.topic} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <button
                     type="button"
                     onClick={() => navigate('/', { state: { prefillTopic: item.topic } })}
-                    className="text-sm font-medium text-orange-800 hover:text-orange-600 underline text-left"
+                    style={{
+                      fontFamily: "'Rajdhani',sans-serif",
+                      fontSize: 13, color: 'var(--amber)',
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      textDecoration: 'underline', textAlign: 'left',
+                    }}
                   >
                     {item.topic}
                   </button>
-                  <span className="text-xs text-orange-500">
-                    {item.interval_days === 1 ? 'Today' : `+${item.interval_days}d`}
+                  <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: 'rgba(245,166,35,0.5)' }}>
+                    {item.interval_days === 1 ? 'TODAY' : `+${item.interval_days}D`}
                   </span>
                 </div>
               ))}
             </div>
             {spacedRep.count > 5 && (
-              <p className="text-xs text-orange-400 mt-2">…and {spacedRep.count - 5} more</p>
+              <p style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: 'rgba(245,166,35,0.4)', marginTop: 6 }}>
+                …AND {spacedRep.count - 5} MORE
+              </p>
             )}
           </div>
         )}
@@ -136,201 +222,209 @@ export default function Profile() {
         <TopicRecommendations />
 
         {/* Style weights */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="font-semibold text-gray-900 text-base mb-1">Learning Style Weights</h2>
-          <p className="text-gray-400 text-sm mb-5">
-            These evolve automatically as you rate explanations.
-          </p>
-          <div className="space-y-4">
+        <SectionCard title="STYLE_WEIGHT_MATRIX" subtitle="EVOLVES AUTOMATICALLY AS YOU RATE EXPLANATIONS">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {Object.entries(STYLE_META).map(([key, meta]) => {
               const weight = weights[key] ?? 0
               const pct = Math.round(weight * 100)
               return (
                 <div key={key}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
-                      <span>{meta.icon}</span> {meta.label}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{
+                      fontFamily: "'Share Tech Mono',monospace",
+                      fontSize: 9, letterSpacing: '0.12em', color: meta.color,
+                    }}>
+                      {meta.label}
                     </span>
-                    <span className="text-sm font-semibold text-gray-500">{pct}%</span>
+                    <span style={{
+                      fontFamily: "'Share Tech Mono',monospace",
+                      fontSize: 9, color: 'var(--sub)',
+                    }}>
+                      {pct}%
+                    </span>
                   </div>
-                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="weight-bar-track">
                     <div
-                      className={`h-full rounded-full transition-all duration-700 ${meta.color}`}
-                      style={{ width: `${pct}%` }}
+                      className="weight-bar-fill"
+                      style={{ width: `${pct}%`, background: meta.bar, boxShadow: `0 0 8px ${meta.bar}` }}
                     />
                   </div>
                 </div>
               )
             })}
           </div>
-        </div>
+        </SectionCard>
 
         {/* Feedback summary */}
         {summary && Object.keys(summary.per_style).length > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 className="font-semibold text-gray-900 text-base mb-1">30-Day Feedback Summary</h2>
-            <p className="text-gray-400 text-sm mb-5">How each style has performed based on your ratings.</p>
-            <div className="grid grid-cols-3 gap-3">
-              {Object.entries(summary.per_style).map(([s, data]) => {
-                const meta = STYLE_META[s] || { label: s, icon: '📄' }
+          <SectionCard title="30D_FEEDBACK_SUMMARY" subtitle="STYLE PERFORMANCE BASED ON YOUR RATINGS">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+              {Object.entries(summary.per_style).map(([s, d]) => {
+                const meta = STYLE_META[s] || { label: s.toUpperCase(), color: 'var(--sub)' }
+                const isBest = summary.best_style === s
                 return (
-                  <div key={s} className={`rounded-xl p-3.5 border ${summary.best_style === s ? 'border-indigo-200 bg-indigo-50' : 'border-gray-100 bg-gray-50'}`}>
-                    <div className="text-lg mb-1">{meta.icon}</div>
-                    <div className="text-xs font-semibold text-gray-700 mb-2">{meta.label}</div>
-                    <div className="text-2xl font-bold text-gray-900">{Math.round(data.win_rate * 100)}%</div>
-                    <div className="text-xs text-gray-400 mt-0.5">win rate · {data.count} rated</div>
-                    {summary.best_style === s && (
-                      <div className="text-xs font-medium text-indigo-600 mt-1.5">Best performing</div>
+                  <div key={s} style={{
+                    padding: '0.875rem',
+                    background: isBest ? 'rgba(0,229,255,0.04)' : 'rgba(0,229,255,0.02)',
+                    border: `1px solid ${isBest ? 'rgba(0,229,255,0.25)' : 'rgba(0,229,255,0.08)'}`,
+                    borderRadius: 2,
+                  }}>
+                    <p style={{
+                      fontFamily: "'Share Tech Mono',monospace",
+                      fontSize: 8, letterSpacing: '0.1em', color: meta.color, marginBottom: 6,
+                    }}>
+                      {meta.label}
+                    </p>
+                    <p style={{
+                      fontFamily: "'Orbitron',monospace",
+                      fontSize: 22, fontWeight: 700, color: 'var(--text)',
+                    }}>
+                      {Math.round(d.win_rate * 100)}%
+                    </p>
+                    <p style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: 'var(--dim)', marginTop: 2 }}>
+                      {d.count} RATED
+                    </p>
+                    {isBest && (
+                      <p style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: 'var(--cyan)', marginTop: 4 }}>
+                        ★ BEST
+                      </p>
                     )}
                   </div>
                 )
               })}
             </div>
-          </div>
+          </SectionCard>
         )}
 
-        {/* Concept Dependency Graph */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="font-semibold text-gray-900 text-base mb-1">Concept Dependency Graph</h2>
-          <p className="text-gray-400 text-sm mb-4">
-            See what you need to know before a topic, and what to learn next.
-          </p>
+        {/* Dep graph */}
+        <SectionCard title="CONCEPT_DEPENDENCY_GRAPH" subtitle="PREREQUISITES AND WHAT TO LEARN NEXT">
           <form
             onSubmit={(e) => { e.preventDefault(); setDepTopic(depInput.trim()) }}
-            className="flex gap-2 mb-4"
+            style={{ display: 'flex', gap: 8, marginBottom: '0.875rem' }}
           >
             <input
               type="text"
               value={depInput}
               onChange={(e) => setDepInput(e.target.value)}
-              placeholder="Enter a topic (e.g. binary search)…"
-              className="flex-1 text-sm px-3 py-2 rounded-xl border border-gray-200 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 outline-none"
+              placeholder="enter topic (e.g. binary search)…"
+              className="cyber-input"
+              style={{ padding: '0.4rem 0.75rem', fontSize: 12 }}
             />
-            <button
-              type="submit"
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl transition-colors"
-            >
-              Show
-            </button>
+            <button type="submit" className="cyber-btn-ghost">SHOW</button>
           </form>
           {topicSet.length > 0 && !depTopic && (
-            <div className="flex flex-wrap gap-1.5 mb-4">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: '0.875rem' }}>
               {topicSet.slice(0, 8).map((t) => (
                 <button
                   key={t}
                   type="button"
                   onClick={() => { setDepInput(t); setDepTopic(t) }}
-                  className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                  style={{
+                    fontFamily: "'Share Tech Mono',monospace",
+                    fontSize: 8, letterSpacing: '0.08em',
+                    padding: '3px 8px', borderRadius: 2,
+                    background: 'rgba(0,229,255,0.03)',
+                    border: '1px solid rgba(0,229,255,0.12)',
+                    color: 'var(--sub)', cursor: 'pointer', transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--cyan)'; e.currentTarget.style.borderColor = 'rgba(0,229,255,0.3)' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--sub)'; e.currentTarget.style.borderColor = 'rgba(0,229,255,0.12)' }}
                 >
                   {t}
                 </button>
               ))}
             </div>
           )}
-          <DepGraph
-            topic={depTopic}
-            onTopicSelect={(t) => navigate('/', { state: { prefillTopic: t } })}
-          />
-        </div>
+          <DepGraph topic={depTopic} onTopicSelect={(t) => navigate('/', { state: { prefillTopic: t } })} />
+        </SectionCard>
 
-        {/* Explanation Diff */}
+        {/* Diff */}
         {historyItems.length >= 2 && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 className="font-semibold text-gray-900 text-base mb-1">Compare Two Explanations</h2>
-            <p className="text-gray-400 text-sm mb-4">
-              See exactly how different style or difficulty choices change the wording.
-            </p>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Version 1</label>
-                <select
-                  value={diffH1}
-                  onChange={(e) => setDiffH1(e.target.value)}
-                  className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 focus:border-indigo-400 outline-none bg-white"
-                >
-                  <option value="">Select…</option>
-                  {historyItems.map((h) => (
-                    <option key={h.id} value={h.id}>
-                      {h.topic} · {h.style_used} · {new Date(h.created_at).toLocaleDateString()}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1">Version 2</label>
-                <select
-                  value={diffH2}
-                  onChange={(e) => setDiffH2(e.target.value)}
-                  className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 focus:border-indigo-400 outline-none bg-white"
-                >
-                  <option value="">Select…</option>
-                  {historyItems.map((h) => (
-                    <option key={h.id} value={h.id}>
-                      {h.topic} · {h.style_used} · {new Date(h.created_at).toLocaleDateString()}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <SectionCard title="COMPARE_EXPLANATIONS" subtitle="SEE HOW STYLE OR DIFFICULTY CHANGES THE OUTPUT">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: '0.875rem' }}>
+              {[{ label: 'VERSION_1', val: diffH1, set: setDiffH1 }, { label: 'VERSION_2', val: diffH2, set: setDiffH2 }].map(({ label, val, set }) => (
+                <div key={label}>
+                  <label className="mono-label">{label}</label>
+                  <select value={val} onChange={(e) => set(e.target.value)} style={selectStyle}>
+                    <option value="">SELECT…</option>
+                    {historyItems.map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {h.topic} · {h.style_used} · {new Date(h.created_at).toLocaleDateString()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
             </div>
             <DiffView h1={diffH1} h2={diffH2} />
-          </div>
+          </SectionCard>
         )}
 
-        {/* Manual override */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="font-semibold text-gray-900 text-base mb-1">Override Preferences</h2>
-          <p className="text-gray-400 text-sm mb-5">
-            Force a specific style instead of the auto-selected one.
-          </p>
-
-          <div className="mb-5">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Default style</label>
-            <div className="grid grid-cols-4 gap-2">
+        {/* Override preferences */}
+        <SectionCard title="OVERRIDE_PREFERENCES" subtitle="FORCE A SPECIFIC STYLE INSTEAD OF AUTO-SELECTED">
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label className="mono-label">DEFAULT_STYLE</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 6 }}>
               {[
-                { value: 'auto', label: 'Auto', icon: '✨' },
-                ...Object.entries(STYLE_META).map(([v, m]) => ({ value: v, label: m.label, icon: m.icon })),
+                { value: 'auto', label: 'AUTO', color: 'var(--cyan)' },
+                { value: 'analogy', label: 'ANALOGY', color: 'var(--purple)' },
+                { value: 'step-by-step', label: 'STEP', color: 'var(--cyan)' },
+                { value: 'code-based', label: 'CODE', color: 'var(--green)' },
               ].map((s) => (
                 <button
                   key={s.value}
                   type="button"
                   onClick={() => setStyle(s.value)}
-                  className={`p-2.5 rounded-xl border-2 text-center transition-all ${
-                    style === s.value
-                      ? 'border-indigo-500 bg-indigo-50'
-                      : 'border-gray-100 hover:border-gray-200 bg-gray-50'
-                  }`}
+                  style={{
+                    padding: '0.625rem',
+                    border: style === s.value ? `1px solid ${s.color}` : '1px solid rgba(0,229,255,0.1)',
+                    background: style === s.value ? `rgba(0,229,255,0.06)` : 'transparent',
+                    borderRadius: 2, cursor: 'pointer', transition: 'all 0.2s',
+                    textAlign: 'center',
+                  }}
                 >
-                  <div className="text-lg">{s.icon}</div>
-                  <div className={`text-xs font-medium mt-0.5 ${style === s.value ? 'text-indigo-700' : 'text-gray-600'}`}>
+                  <p style={{
+                    fontFamily: "'Share Tech Mono',monospace",
+                    fontSize: 8, letterSpacing: '0.1em',
+                    color: style === s.value ? s.color : 'var(--dim)',
+                  }}>
                     {s.label}
-                  </div>
+                  </p>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-semibold text-gray-700">Difficulty</label>
-              <span className="text-sm font-medium text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <label className="mono-label" style={{ marginBottom: 0 }}>DIFFICULTY</label>
+              <span style={{
+                fontFamily: "'Share Tech Mono',monospace", fontSize: 9,
+                color: 'var(--cyan)', border: '1px solid rgba(0,229,255,0.25)',
+                padding: '2px 8px', borderRadius: 2,
+              }}>
                 {difficulty}/5 — {DIFFICULTY_LABELS[difficulty]}
               </span>
             </div>
             <input
               type="range" min={1} max={5} step={1} value={difficulty}
               onChange={(e) => setDifficulty(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer accent-indigo-600"
+              style={{
+                width: '100%', height: 3, borderRadius: 2, appearance: 'none',
+                cursor: 'pointer', outline: 'none', accentColor: 'var(--cyan)',
+                background: `linear-gradient(to right, var(--cyan) ${(difficulty - 1) * 25}%, rgba(0,229,255,0.1) ${(difficulty - 1) * 25}%)`,
+              }}
             />
           </div>
 
           <button
             onClick={() => updateMutation.mutate({ preferred_style: style, difficulty_level: difficulty })}
             disabled={updateMutation.isPending}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold py-3 rounded-xl transition-all"
+            className="cyber-btn"
           >
-            {updateMutation.isPending ? 'Saving...' : 'Save preferences'}
+            {updateMutation.isPending ? 'SAVING…' : 'SAVE_PREFERENCES'}
           </button>
-        </div>
+        </SectionCard>
       </div>
     </div>
   )

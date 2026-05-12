@@ -1,40 +1,45 @@
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../lib/api'
 
 function DiffLine({ line }) {
+  const base = {
+    fontFamily: "'Share Tech Mono',monospace",
+    fontSize: 10, padding: '2px 12px', display: 'block',
+    borderLeft: '2px solid transparent',
+  }
+
   if (line.startsWith('---') || line.startsWith('+++')) {
     return (
-      <div className="text-xs font-mono text-gray-400 px-3 py-0.5 bg-gray-50 border-b border-gray-100">
+      <span style={{ ...base, color: 'var(--dim)', background: 'rgba(0,229,255,0.02)' }}>
         {line}
-      </div>
+      </span>
     )
   }
   if (line.startsWith('@@')) {
     return (
-      <div className="text-xs font-mono text-indigo-500 px-3 py-0.5 bg-indigo-50">
+      <span style={{ ...base, color: 'var(--purple)', background: 'rgba(124,110,240,0.06)' }}>
         {line}
-      </div>
+      </span>
     )
   }
   if (line.startsWith('+')) {
     return (
-      <div className="text-xs font-mono text-green-800 px-3 py-0.5 bg-green-50 border-l-2 border-green-400">
+      <span style={{ ...base, color: 'var(--green)', background: 'rgba(0,255,157,0.04)', borderLeftColor: 'rgba(0,255,157,0.4)' }}>
         {line}
-      </div>
+      </span>
     )
   }
   if (line.startsWith('-')) {
     return (
-      <div className="text-xs font-mono text-red-800 px-3 py-0.5 bg-red-50 border-l-2 border-red-400">
+      <span style={{ ...base, color: '#ff4466', background: 'rgba(255,68,102,0.04)', borderLeftColor: 'rgba(255,68,102,0.4)' }}>
         {line}
-      </div>
+      </span>
     )
   }
   return (
-    <div className="text-xs font-mono text-gray-600 px-3 py-0.5">
+    <span style={{ ...base, color: 'var(--sub)' }}>
       {line}
-    </div>
+    </span>
   )
 }
 
@@ -46,34 +51,66 @@ export default function DiffView({ h1, h2 }) {
   })
 
   if (!h1 || !h2) return null
-  if (h1 === h2) return <p className="text-sm text-gray-400 text-center py-4">Select two different versions to compare.</p>
+  if (h1 === h2) return (
+    <p style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 9, color: 'var(--dim)', textAlign: 'center', padding: '0.75rem 0' }}>
+      SELECT TWO DIFFERENT VERSIONS
+    </p>
+  )
 
   if (isLoading) {
     return (
-      <div className="h-24 flex items-center justify-center text-gray-400 text-sm">
-        Computing diff…
+      <div style={{
+        height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: "'Share Tech Mono',monospace", fontSize: 9, color: 'var(--dim)',
+      }}>
+        COMPUTING DIFF…
       </div>
     )
   }
 
   if (error) {
-    return <p className="text-sm text-red-500 text-center py-4">Could not load diff.</p>
+    return (
+      <p style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 9, color: '#ff4466', textAlign: 'center', padding: '0.75rem 0' }}>
+        DIFF_LOAD_ERROR
+      </p>
+    )
   }
 
   if (!data?.diff?.length) {
-    return <p className="text-sm text-gray-400 text-center py-4">No differences found.</p>
+    return (
+      <p style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 9, color: 'var(--dim)', textAlign: 'center', padding: '0.75rem 0' }}>
+        NO_DIFFERENCES_FOUND
+      </p>
+    )
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center gap-3 flex-wrap">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Explanation Diff</span>
-        <div className="flex items-center gap-2 ml-auto text-xs text-gray-400">
-          <span className="w-3 h-3 bg-red-100 border-l-2 border-red-400 inline-block" /> Removed
-          <span className="w-3 h-3 bg-green-100 border-l-2 border-green-400 inline-block ml-2" /> Added
+    <div style={{
+      background: 'rgba(3,6,15,0.8)',
+      border: '1px solid rgba(0,229,255,0.12)',
+      borderRadius: 2, overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '0.4rem 0.875rem',
+        borderBottom: '1px solid rgba(0,229,255,0.08)',
+        display: 'flex', alignItems: 'center', gap: 12,
+        flexWrap: 'wrap',
+      }}>
+        <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 9, letterSpacing: '0.14em', color: 'var(--sub)' }}>
+          EXPLANATION_DIFF
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: 'var(--dim)' }}>
+            <span style={{ width: 10, height: 10, background: 'rgba(255,68,102,0.15)', borderLeft: '2px solid rgba(255,68,102,0.5)', display: 'inline-block' }} />
+            REMOVED
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: 'var(--dim)' }}>
+            <span style={{ width: 10, height: 10, background: 'rgba(0,255,157,0.1)', borderLeft: '2px solid rgba(0,255,157,0.5)', display: 'inline-block' }} />
+            ADDED
+          </span>
         </div>
       </div>
-      <div className="max-h-96 overflow-y-auto divide-y divide-gray-50">
+      <div style={{ maxHeight: 384, overflowY: 'auto' }}>
         {data.diff.map((line, i) => (
           <DiffLine key={i} line={line} />
         ))}

@@ -4,7 +4,7 @@ import mermaid from 'mermaid'
 import toast from 'react-hot-toast'
 import api from '../lib/api'
 
-mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' })
+mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' })
 
 function MermaidRenderer({ code }) {
   const id = useId().replace(/:/g, '')
@@ -19,12 +19,27 @@ function MermaidRenderer({ code }) {
       .catch(() => setError('Could not render diagram'))
   }, [code, id])
 
-  if (error) return <p className="text-red-500 text-sm py-4 text-center">{error}</p>
-  if (!svg) return <div className="h-24 flex items-center justify-center text-gray-400 text-sm">Rendering…</div>
+  if (error) return (
+    <p style={{
+      fontFamily: "'Share Tech Mono',monospace",
+      fontSize: 10, color: '#ff4466', textAlign: 'center', padding: '1rem',
+    }}>
+      RENDER_ERROR
+    </p>
+  )
+  if (!svg) return (
+    <div style={{
+      height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'Share Tech Mono',monospace",
+      fontSize: 9, color: 'var(--dim)', letterSpacing: '0.1em',
+    }}>
+      RENDERING…
+    </div>
+  )
 
   return (
     <div
-      className="overflow-auto flex items-center justify-center p-4"
+      style={{ overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )
@@ -46,9 +61,7 @@ export default function DiagramView({ historyId }) {
     const blob = new Blob([svgEl.outerHTML], { type: 'image/svg+xml' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = url
-    a.download = 'diagram.svg'
-    a.click()
+    a.href = url; a.download = 'diagram.svg'; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -58,41 +71,63 @@ export default function DiagramView({ historyId }) {
         type="button"
         onClick={() => mutation.mutate()}
         disabled={mutation.isPending}
-        className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-700 font-medium px-3 py-2 rounded-xl hover:bg-indigo-50 transition-all disabled:opacity-50"
+        className="cyber-btn-ghost"
+        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
       >
         {mutation.isPending ? (
-          <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          <svg style={{ animation: 'spinCW 1s linear infinite' }} width="12" height="12" fill="none" viewBox="0 0 24 24">
+            <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
           </svg>
         ) : (
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
           </svg>
         )}
-        {mutation.isPending ? 'Generating diagram…' : 'Diagram'}
+        {mutation.isPending ? 'GENERATING…' : 'GENERATE_DIAGRAM'}
       </button>
     )
   }
 
   return (
-    <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Concept Diagram</span>
-        <div className="flex gap-2">
+    <div style={{
+      background: 'rgba(3,6,15,0.8)',
+      border: '1px solid rgba(0,229,255,0.15)',
+      borderRadius: 2, overflow: 'hidden',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0.4rem 0.875rem',
+        borderBottom: '1px solid rgba(0,229,255,0.1)',
+      }}>
+        <span style={{
+          fontFamily: "'Share Tech Mono',monospace",
+          fontSize: 9, letterSpacing: '0.14em', color: 'var(--sub)',
+        }}>
+          CONCEPT_DIAGRAM
+        </span>
+        <div style={{ display: 'flex', gap: 10 }}>
           <button
             type="button"
             onClick={() => setDiagramCode('')}
-            className="text-xs text-gray-400 hover:text-gray-700"
+            style={{
+              fontFamily: "'Share Tech Mono',monospace",
+              fontSize: 9, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer',
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--sub)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--dim)'}
           >
-            Regenerate
+            REGEN
           </button>
           <button
             type="button"
             onClick={handleExport}
-            className="text-xs text-indigo-500 hover:text-indigo-700 font-medium"
+            style={{
+              fontFamily: "'Share Tech Mono',monospace",
+              fontSize: 9, color: 'var(--cyan)', background: 'none', border: 'none', cursor: 'pointer',
+            }}
           >
-            Export SVG
+            EXPORT_SVG
           </button>
         </div>
       </div>

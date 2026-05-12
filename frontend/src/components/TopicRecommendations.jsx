@@ -13,36 +13,63 @@ export default function TopicRecommendations() {
 
   if (isLoading || !data?.recommendations?.length) return null
 
-  const handleLearn = (topic) => {
-    navigate('/', { state: { prefillTopic: topic } })
-  }
-
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <h2 className="font-semibold text-gray-900 text-base mb-1">What to Learn Next</h2>
-      <p className="text-gray-400 text-sm mb-5">
-        Personalised picks based on your learning path and style.
+    <div className="cyber-panel" style={{ padding: '1.25rem 1.5rem' }}>
+      <p style={{
+        fontFamily: "'Orbitron',monospace",
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.1em',
+        color: 'var(--cyan)', marginBottom: 4,
+      }}>
+        WHAT_TO_LEARN_NEXT
+      </p>
+      <p style={{
+        fontFamily: "'Share Tech Mono',monospace",
+        fontSize: 9, color: 'var(--dim)', letterSpacing: '0.1em', marginBottom: '1rem',
+      }}>
+        PERSONALISED PICKS BASED ON YOUR LEARNING PATH
       </p>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: 8 }}>
         {data.recommendations.map(({ topic, score }) => (
           <button
             key={topic}
             type="button"
-            onClick={() => handleLearn(topic)}
-            className="group text-left p-3.5 rounded-xl border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50 transition-all"
+            onClick={() => navigate('/', { state: { prefillTopic: topic } })}
+            style={{
+              textAlign: 'left', padding: '0.75rem',
+              background: 'rgba(0,229,255,0.02)',
+              border: '1px solid rgba(0,229,255,0.1)',
+              borderRadius: 2, cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = 'rgba(0,229,255,0.3)'
+              e.currentTarget.style.background = 'rgba(0,229,255,0.06)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = 'rgba(0,229,255,0.1)'
+              e.currentTarget.style.background = 'rgba(0,229,255,0.02)'
+            }}
           >
-            <div className="flex items-start justify-between gap-1 mb-1">
-              <span className="text-sm font-medium text-gray-800 group-hover:text-indigo-700 leading-tight">
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4, marginBottom: 6 }}>
+              <span style={{
+                fontFamily: "'Rajdhani',sans-serif",
+                fontSize: 13, fontWeight: 600, color: 'var(--text)',
+                lineHeight: 1.3,
+              }}>
                 {topic}
               </span>
-              <svg className="w-3.5 h-3.5 text-gray-300 group-hover:text-indigo-400 flex-shrink-0 mt-0.5 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg width="10" height="10" fill="none" stroke="var(--dim)" viewBox="0 0 24 24" style={{ flexShrink: 0, marginTop: 2 }}>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>
-            <div className="flex gap-0.5">
+            <div style={{ display: 'flex', gap: 3 }}>
               {Array.from({ length: Math.min(score, 5) }).map((_, i) => (
-                <span key={i} className="w-1.5 h-1.5 rounded-full bg-indigo-300 group-hover:bg-indigo-400" />
+                <span key={i} style={{
+                  width: 5, height: 5, borderRadius: '50%',
+                  background: 'var(--cyan)', opacity: 0.6,
+                  display: 'inline-block',
+                }} />
               ))}
             </div>
           </button>

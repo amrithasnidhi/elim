@@ -6,18 +6,19 @@ import api from '../lib/api'
 import ExplainCard from '../components/ExplainCard'
 import StyleTabs from '../components/StyleTabs'
 import SocraticChat from '../components/SocraticChat'
+import LogoOrbit from '../components/LogoOrbit'
+import Background from '../components/Background'
 import useAuthStore from '../store/useAuthStore'
 
 const STYLES = [
-  { value: 'analogy', label: 'Analogy', description: 'Real-world comparisons', icon: '🧩' },
-  { value: 'step-by-step', label: 'Step-by-Step', description: 'Numbered walkthrough', icon: '📋' },
-  { value: 'code-based', label: 'Code-First', description: 'Working examples', icon: '💻' },
+  { value: 'analogy',      label: 'ANALOGY',       desc: 'Real-world comparisons', color: 'var(--purple)', border: 'rgba(124,110,240,0.4)', bg: 'rgba(124,110,240,0.06)' },
+  { value: 'step-by-step', label: 'STEP-BY-STEP',  desc: 'Numbered walkthrough',   color: 'var(--cyan)',   border: 'rgba(0,229,255,0.4)',   bg: 'rgba(0,229,255,0.06)' },
+  { value: 'code-based',   label: 'CODE-FIRST',     desc: 'Working examples',       color: 'var(--green)',  border: 'rgba(0,255,157,0.4)',   bg: 'rgba(0,255,157,0.06)' },
 ]
 
-const DIFFICULTY_LABELS = ['', 'Beginner', 'Basic', 'Intermediate', 'Advanced', 'Expert']
-
+const DIFFICULTY_LABELS = ['', 'BEGINNER', 'BASIC', 'INTERMEDIATE', 'ADVANCED', 'EXPERT']
 const MODE_SINGLE = 'single'
-const MODE_MULTI = 'multi'
+const MODE_MULTI  = 'multi'
 const MODE_SOCRATIC = 'socratic'
 
 export default function Home() {
@@ -32,7 +33,6 @@ export default function Home() {
   const mediaRecorderRef = useRef(null)
   const chunksRef = useRef([])
 
-  // Prefill topic from recommendation navigation
   useEffect(() => {
     if (location.state?.prefillTopic) {
       setTopic(location.state.prefillTopic)
@@ -43,18 +43,18 @@ export default function Home() {
   const singleMutation = useMutation({
     mutationFn: (data) => api.post('/explain/generate', data).then((r) => r.data),
     onSuccess: () => setDisplayTime(new Date().toISOString()),
-    onError: (err) => toast.error(err.response?.data?.detail || 'Something went wrong. Please try again.'),
+    onError: (err) => toast.error(err.response?.data?.detail || 'GENERATION FAILED'),
   })
 
   const multiMutation = useMutation({
     mutationFn: (data) => api.post('/explain/multi-style', data).then((r) => r.data),
     onSuccess: () => setDisplayTime(new Date().toISOString()),
-    onError: (err) => toast.error(err.response?.data?.detail || 'Something went wrong. Please try again.'),
+    onError: (err) => toast.error(err.response?.data?.detail || 'GENERATION FAILED'),
   })
 
   const socraticMutation = useMutation({
     mutationFn: (data) => api.post('/explain/socratic', data).then((r) => r.data),
-    onError: (err) => toast.error(err.response?.data?.detail || 'Something went wrong. Please try again.'),
+    onError: (err) => toast.error(err.response?.data?.detail || 'GENERATION FAILED'),
   })
 
   const handleVoice = async () => {
@@ -79,30 +79,24 @@ export default function Home() {
           })
           if (data.transcribed_text) setTopic(data.transcribed_text)
         } catch {
-          toast.error('Transcription failed — check OPENAI_API_KEY')
+          toast.error('TRANSCRIPTION_FAILED — check OPENAI_API_KEY')
         }
       }
       mr.start()
       mediaRecorderRef.current = mr
       setRecording(true)
     } catch {
-      toast.error('Microphone access denied')
+      toast.error('MICROPHONE_ACCESS_DENIED')
     }
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!topic.trim()) {
-      toast.error('Please enter a topic')
-      return
-    }
+    if (!topic.trim()) { toast.error('ENTER A TOPIC'); return }
     if (mode === MODE_MULTI) {
       multiMutation.mutate({ topic: topic.trim(), difficulty })
     } else if (mode === MODE_SOCRATIC) {
-      if (!user) {
-        toast.error('Sign in to use Socratic mode')
-        return
-      }
+      if (!user) { toast.error('SIGN IN TO USE SOCRATIC MODE'); return }
       socraticMutation.mutate({ topic: topic.trim(), difficulty })
     } else {
       singleMutation.mutate({ topic: topic.trim(), style, difficulty })
@@ -111,50 +105,78 @@ export default function Home() {
 
   const isPending = singleMutation.isPending || multiMutation.isPending || socraticMutation.isPending
 
+  const MODES = [
+    { id: MODE_SINGLE,   label: 'SINGLE' },
+    { id: MODE_MULTI,    label: 'COMPARE_ALL' },
+    { id: MODE_SOCRATIC, label: 'SOCRATIC', tip: user ? '' : 'SIGN IN REQUIRED' },
+  ]
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50">
-      <div className="max-w-3xl mx-auto px-4 py-12">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-1.5 rounded-full text-sm font-medium mb-4">
-            <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-            Adaptive AI Learning
+    <div style={{ minHeight: '100vh', position: 'relative' }}>
+      <Background />
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 720, margin: '0 auto', padding: '3rem 1.5rem 4rem' }}>
+
+        {/* Hero */}
+        <div className="fade-up" style={{ textAlign: 'center', marginBottom: '3rem' }}>
+          <LogoOrbit size={200} />
+          <div style={{ marginTop: '1.75rem' }}>
+            <h1 style={{
+              fontFamily: "'Orbitron',monospace",
+              fontSize: 32, fontWeight: 900,
+              color: 'var(--cyan)',
+              textShadow: '0 0 40px rgba(0,229,255,0.4)',
+              letterSpacing: '0.12em',
+              marginBottom: 8,
+              animation: 'glitch 8s ease-in-out infinite',
+            }}>
+              EXPLAIN LIKE I'M ME
+            </h1>
+            <p style={{
+              fontFamily: "'Share Tech Mono',monospace",
+              fontSize: 12, letterSpacing: '0.14em', color: 'var(--sub)',
+              marginBottom: 12,
+            }}>
+              ADAPTIVE AI LEARNING — PERSONALISED TO YOUR STYLE
+            </p>
+            {user ? (
+              <p style={{
+                fontFamily: "'Share Tech Mono',monospace",
+                fontSize: 11, letterSpacing: '0.1em', color: 'var(--green)',
+              }}>
+                <span style={{ opacity: 0.6 }}>IDENTITY: </span>
+                {user.name.toUpperCase()} — STYLE_WEIGHTS_ACTIVE
+              </p>
+            ) : (
+              <p style={{
+                fontFamily: "'Share Tech Mono',monospace",
+                fontSize: 11, letterSpacing: '0.1em', color: 'var(--dim)',
+              }}>
+                <Link to="/auth/register" style={{ color: 'var(--cyan)', textDecoration: 'none' }}>INITIALISE PROFILE</Link>
+                {' '}TO SAVE PROGRESS AND PERSONALISE EXPLANATIONS
+              </p>
+            )}
           </div>
-          <h1 className="text-5xl font-bold text-gray-900 tracking-tight mb-3">
-            Explain Like I'm <span className="text-indigo-600">Me</span>
-          </h1>
-          <p className="text-gray-500 text-lg">
-            AI explanations personalised to your learning style and knowledge level
-          </p>
-          {user ? (
-            <p className="text-sm text-indigo-600 mt-2 font-medium">
-              Signed in as <strong>{user.name}</strong> — your style preferences are auto-applied
-            </p>
-          ) : (
-            <p className="text-sm text-gray-400 mt-2">
-              <Link to="/auth/register" className="text-indigo-500 hover:underline font-medium">Create an account</Link>
-              {' '}to save your learning style and track progress
-            </p>
-          )}
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+        <form onSubmit={handleSubmit} className="cyber-panel fade-up-1" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
           {/* Mode toggle */}
-          <div className="flex items-center gap-1 mb-6 p-1 bg-gray-100 rounded-xl w-fit">
-            {[
-              { id: MODE_SINGLE, label: 'Single style' },
-              { id: MODE_MULTI, label: 'Compare all 3' },
-              { id: MODE_SOCRATIC, label: '🔦 Socratic', tip: user ? '' : 'Sign in to use' },
-            ].map(({ id, label, tip }) => (
+          <div style={{ display: 'flex', gap: 4, marginBottom: '1.5rem' }}>
+            {MODES.map(({ id, label, tip }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => setMode(id)}
                 title={tip}
-                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  mode === id ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
+                style={{
+                  flex: 1, padding: '6px 8px',
+                  fontFamily: "'Share Tech Mono',monospace",
+                  fontSize: 11, letterSpacing: '0.1em',
+                  border: mode === id ? '1px solid rgba(0,229,255,0.4)' : '1px solid rgba(0,229,255,0.1)',
+                  background: mode === id ? 'rgba(0,229,255,0.08)' : 'transparent',
+                  color: mode === id ? 'var(--cyan)' : 'var(--dim)',
+                  borderRadius: 2, cursor: 'pointer', transition: 'all 0.2s',
+                }}
               >
                 {label}
               </button>
@@ -162,30 +184,31 @@ export default function Home() {
           </div>
 
           {/* Topic input */}
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              What do you want to understand?
-            </label>
-            <div className="relative">
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label className="mono-label">TOPIC_INPUT</label>
+            <div style={{ position: 'relative' }}>
               <input
                 type="text"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                placeholder="e.g. binary search, how vaccines work, transformer architecture..."
-                className="w-full pl-4 pr-12 py-3 rounded-xl border border-gray-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 outline-none text-gray-900 placeholder-gray-400 transition-all text-base"
+                placeholder="binary search / transformer architecture / how vaccines work…"
+                className="cyber-input"
+                style={{ paddingRight: '2.5rem' }}
               />
               {typeof navigator !== 'undefined' && navigator.mediaDevices && (
                 <button
                   type="button"
                   onClick={handleVoice}
                   title={recording ? 'Stop recording' : 'Speak your topic'}
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all ${
-                    recording
-                      ? 'text-red-500 bg-red-50 animate-pulse'
-                      : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'
-                  }`}
+                  style={{
+                    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer', padding: 4,
+                    color: recording ? '#ff4466' : 'var(--dim)',
+                    animation: recording ? 'blink 1s step-end infinite' : 'none',
+                    transition: 'color 0.2s',
+                  }}
                 >
-                  <svg className="w-4 h-4" fill={recording ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <svg width="14" height="14" fill={recording ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                   </svg>
@@ -194,29 +217,38 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Style selector — single mode only */}
+          {/* Style selector — single mode */}
           {mode === MODE_SINGLE && (
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Explanation style
-              </label>
-              <div className="grid grid-cols-3 gap-3">
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label className="mono-label">EXPLANATION_STYLE</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
                 {STYLES.map((s) => (
                   <button
                     key={s.value}
                     type="button"
                     onClick={() => setStyle(s.value)}
-                    className={`p-3 rounded-xl border-2 text-left transition-all ${
-                      style === s.value
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-100 hover:border-gray-200 bg-gray-50'
-                    }`}
+                    style={{
+                      padding: '0.75rem',
+                      border: style === s.value ? `1px solid ${s.border}` : '1px solid rgba(0,229,255,0.1)',
+                      background: style === s.value ? s.bg : 'rgba(0,229,255,0.02)',
+                      borderRadius: 2, cursor: 'pointer', transition: 'all 0.2s',
+                      textAlign: 'left',
+                    }}
                   >
-                    <div className="text-xl mb-1">{s.icon}</div>
-                    <div className={`text-sm font-semibold ${style === s.value ? 'text-indigo-700' : 'text-gray-700'}`}>
+                    <p style={{
+                      fontFamily: "'Share Tech Mono',monospace",
+                      fontSize: 11, letterSpacing: '0.1em',
+                      color: style === s.value ? s.color : 'var(--sub)',
+                      marginBottom: 4,
+                    }}>
                       {s.label}
-                    </div>
-                    <div className="text-xs text-gray-400">{s.description}</div>
+                    </p>
+                    <p style={{
+                      fontFamily: "'Rajdhani',sans-serif",
+                      fontSize: 13, color: 'var(--dim)',
+                    }}>
+                      {s.desc}
+                    </p>
                   </button>
                 ))}
               </div>
@@ -224,71 +256,87 @@ export default function Home() {
           )}
 
           {mode === MODE_MULTI && (
-            <div className="mb-6 p-3.5 bg-indigo-50 border border-indigo-100 rounded-xl text-sm text-indigo-700">
-              Generates all 3 styles simultaneously so you can compare and rate each one.
-              Your ratings carry extra weight since you saw all options.
+            <div style={{
+              marginBottom: '1.25rem', padding: '0.75rem 1rem',
+              background: 'rgba(0,229,255,0.04)',
+              border: '1px solid rgba(0,229,255,0.12)',
+              borderRadius: 2,
+            }}>
+              <p style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, letterSpacing: '0.1em', color: 'var(--sub)' }}>
+                GENERATES ALL 3 STYLES IN PARALLEL — COMPARE AND RATE EACH. RATINGS CARRY EXTRA WEIGHT.
+              </p>
             </div>
           )}
 
           {mode === MODE_SOCRATIC && (
-            <div className="mb-6 p-3.5 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-800">
-              <strong>Socratic mode</strong> — instead of receiving an explanation, you'll be guided
-              through a series of questions to discover the concept yourself.
-              {!user && <span className="block mt-1 text-amber-600 font-medium">Requires sign-in.</span>}
+            <div style={{
+              marginBottom: '1.25rem', padding: '0.75rem 1rem',
+              background: 'rgba(245,166,35,0.04)',
+              border: '1px solid rgba(245,166,35,0.2)',
+              borderRadius: 2,
+            }}>
+              <p style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, letterSpacing: '0.1em', color: 'var(--amber)' }}>
+                SOCRATIC_MODE — YOU WILL BE GUIDED THROUGH QUESTIONS TO DISCOVER THE CONCEPT YOURSELF.
+                {!user && <span style={{ display: 'block', marginTop: 4, color: '#ff4466' }}>REQUIRES SIGN-IN.</span>}
+              </p>
             </div>
           )}
 
-          {/* Difficulty slider */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-semibold text-gray-700">Difficulty level</label>
-              <span className="text-sm font-medium text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">
+          {/* Difficulty */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <label className="mono-label" style={{ marginBottom: 0 }}>DIFFICULTY_LEVEL</label>
+              <span style={{
+                fontFamily: "'Share Tech Mono',monospace",
+                fontSize: 11, letterSpacing: '0.1em',
+                color: 'var(--cyan)',
+                border: '1px solid rgba(0,229,255,0.25)',
+                padding: '2px 8px', borderRadius: 2,
+              }}>
                 {difficulty}/5 — {DIFFICULTY_LABELS[difficulty]}
               </span>
             </div>
             <input
-              type="range"
-              min={1}
-              max={5}
-              step={1}
+              type="range" min={1} max={5} step={1}
               value={difficulty}
               onChange={(e) => setDifficulty(Number(e.target.value))}
-              className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer accent-indigo-600"
+              style={{
+                width: '100%', height: 3,
+                background: `linear-gradient(to right, var(--cyan) ${(difficulty - 1) * 25}%, rgba(0,229,255,0.1) ${(difficulty - 1) * 25}%)`,
+                borderRadius: 2, appearance: 'none', cursor: 'pointer', outline: 'none',
+                accentColor: 'var(--cyan)',
+              }}
             />
-            <div className="flex justify-between text-xs text-gray-400 mt-1">
-              <span>Beginner</span>
-              <span>Expert</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+              <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 10, color: 'var(--dim)' }}>BEGINNER</span>
+              <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 10, color: 'var(--dim)' }}>EXPERT</span>
             </div>
           </div>
 
           {/* Submit */}
-          <button
-            type="submit"
-            disabled={isPending}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold py-3.5 rounded-xl transition-all text-base flex items-center justify-center gap-2"
-          >
+          <button type="submit" disabled={isPending} className="cyber-btn">
             {isPending ? (
-              <>
-                <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <svg style={{ animation: 'spinCW 1s linear infinite' }} width="14" height="14" fill="none" viewBox="0 0 24 24">
+                  <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                 </svg>
-                {mode === MODE_MULTI ? 'Generating all 3 styles...' : mode === MODE_SOCRATIC ? 'Starting session...' : 'Generating explanation...'}
-              </>
+                {mode === MODE_MULTI ? 'GENERATING ALL 3…' : mode === MODE_SOCRATIC ? 'INITIALISING SESSION…' : 'GENERATING…'}
+              </span>
             ) : (
-              <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                {mode === MODE_MULTI ? 'Compare all 3 styles' : mode === MODE_SOCRATIC ? 'Start Socratic session' : 'Explain this to me'}
-              </>
+                {mode === MODE_MULTI ? 'COMPARE ALL 3 STYLES' : mode === MODE_SOCRATIC ? 'START SOCRATIC SESSION' : 'EXPLAIN THIS TO ME'}
+              </span>
             )}
           </button>
         </form>
 
         {/* Single result */}
         {mode === MODE_SINGLE && singleMutation.isSuccess && singleMutation.data && (
-          <div className="animate-fade-in">
+          <div className="animate-scan-in">
             <ExplainCard
               explanation={singleMutation.data.explanation}
               followup={singleMutation.data.followup}
@@ -303,18 +351,14 @@ export default function Home() {
 
         {/* Multi-style result */}
         {mode === MODE_MULTI && multiMutation.isSuccess && multiMutation.data && (
-          <div className="animate-fade-in">
-            <StyleTabs
-              data={multiMutation.data}
-              displayTimeUtc={displayTime}
-              topic={topic}
-            />
+          <div className="animate-scan-in">
+            <StyleTabs data={multiMutation.data} displayTimeUtc={displayTime} topic={topic} />
           </div>
         )}
 
         {/* Socratic result */}
         {mode === MODE_SOCRATIC && socraticMutation.isSuccess && socraticMutation.data && (
-          <div className="animate-fade-in">
+          <div className="animate-scan-in">
             <SocraticChat
               openingQuestion={socraticMutation.data.opening_question}
               historyId={socraticMutation.data.history_id}

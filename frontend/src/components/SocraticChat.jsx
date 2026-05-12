@@ -35,52 +35,128 @@ export default function SocraticChat({ openingQuestion, historyId, topic }) {
     mutation.mutate(q)
   }
 
-  const turns = Math.floor(messages.filter((m) => m.role === 'user').length)
+  const turns = messages.filter((m) => m.role === 'user').length
   const atLimit = turns >= 10
 
   return (
-    <div className="flex flex-col bg-amber-50 rounded-xl border border-amber-100 overflow-hidden">
+    <div style={{
+      background: 'rgba(7,5,2,0.9)',
+      border: '1px solid rgba(245,166,35,0.25)',
+      borderRadius: 2, overflow: 'hidden',
+      position: 'relative',
+    }}>
+      {/* Corner brackets */}
+      <div style={{
+        position: 'absolute', top: -1, left: -1,
+        width: 12, height: 12,
+        borderTop: '2px solid rgba(245,166,35,0.7)',
+        borderLeft: '2px solid rgba(245,166,35,0.7)',
+      }} />
+      <div style={{
+        position: 'absolute', bottom: -1, right: -1,
+        width: 12, height: 12,
+        borderBottom: '2px solid rgba(245,166,35,0.7)',
+        borderRight: '2px solid rgba(245,166,35,0.7)',
+      }} />
+
       {/* Header */}
-      <div className="px-4 py-2.5 border-b border-amber-100 flex items-center gap-2 bg-amber-50">
-        <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div style={{
+        padding: '0.6rem 1rem',
+        borderBottom: '1px solid rgba(245,166,35,0.15)',
+        display: 'flex', alignItems: 'center', gap: 8,
+        background: 'rgba(245,166,35,0.04)',
+      }}>
+        <svg width="13" height="13" fill="none" stroke="var(--amber)" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
         </svg>
-        <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">
-          Socratic Mode — {topic}
+        <span style={{
+          fontFamily: "'Share Tech Mono',monospace",
+          fontSize: 9, letterSpacing: '0.16em', color: 'var(--amber)',
+        }}>
+          SOCRATIC_MODE — {topic?.toUpperCase()}
         </span>
-        <span className="ml-auto text-xs text-amber-500">{turns}/10 turns</span>
+        <span style={{
+          marginLeft: 'auto',
+          fontFamily: "'Share Tech Mono',monospace",
+          fontSize: 9,
+          color: atLimit ? '#ff4466' : 'rgba(245,166,35,0.5)',
+        }}>
+          {turns}/10
+        </span>
       </div>
 
       {/* Messages */}
-      <div className="max-h-80 overflow-y-auto px-4 py-3 space-y-3">
+      <div style={{ maxHeight: 320, overflowY: 'auto', padding: '0.75rem 1rem' }}>
         {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={i} style={{
+            display: 'flex',
+            justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+            alignItems: 'flex-start',
+            marginBottom: 10, gap: 6,
+          }}>
             {msg.role === 'assistant' && (
-              <span className="w-6 h-6 rounded-full bg-amber-400 flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0 mt-0.5">
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%',
+                background: 'rgba(245,166,35,0.2)',
+                border: '1px solid rgba(245,166,35,0.5)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, marginTop: 2,
+                fontFamily: "'Orbitron',monospace",
+                fontSize: 9, fontWeight: 700, color: 'var(--amber)',
+              }}>
                 S
-              </span>
+              </div>
             )}
-            <div
-              className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                msg.role === 'user'
-                  ? 'bg-indigo-600 text-white rounded-br-sm'
-                  : 'bg-white border border-amber-100 text-gray-700 rounded-bl-sm shadow-sm'
-              }`}
-            >
+            <div style={{
+              maxWidth: '80%',
+              padding: '0.5rem 0.875rem',
+              borderRadius: 2,
+              fontSize: 13,
+              lineHeight: 1.6,
+              fontFamily: "'Rajdhani',sans-serif",
+              ...(msg.role === 'user' ? {
+                background: 'rgba(0,229,255,0.1)',
+                border: '1px solid rgba(0,229,255,0.25)',
+                color: 'var(--cyan)',
+              } : {
+                background: 'rgba(245,166,35,0.05)',
+                border: '1px solid rgba(245,166,35,0.15)',
+                color: 'var(--text)',
+              }),
+            }}>
               {msg.content}
             </div>
           </div>
         ))}
         {mutation.isPending && (
-          <div className="flex justify-start">
-            <span className="w-6 h-6 rounded-full bg-amber-400 flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0">S</span>
-            <div className="bg-white border border-amber-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
-              <div className="flex gap-1 items-center">
-                <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 10 }}>
+            <div style={{
+              width: 22, height: 22, borderRadius: '50%',
+              background: 'rgba(245,166,35,0.2)',
+              border: '1px solid rgba(245,166,35,0.5)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+              fontFamily: "'Orbitron',monospace",
+              fontSize: 9, fontWeight: 700, color: 'var(--amber)',
+            }}>
+              S
+            </div>
+            <div style={{
+              padding: '0.5rem 0.875rem',
+              background: 'rgba(245,166,35,0.05)',
+              border: '1px solid rgba(245,166,35,0.15)',
+              borderRadius: 2,
+              display: 'flex', gap: 4, alignItems: 'center',
+            }}>
+              {[0, 150, 300].map((d) => (
+                <span key={d} style={{
+                  width: 5, height: 5, borderRadius: '50%',
+                  background: 'var(--amber)',
+                  display: 'inline-block',
+                  animation: `blink 1.2s ${d}ms ease-in-out infinite`,
+                }} />
+              ))}
             </div>
           </div>
         )}
@@ -88,28 +164,46 @@ export default function SocraticChat({ openingQuestion, historyId, topic }) {
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSend} className="flex items-center gap-2 px-3 py-2.5 border-t border-amber-100 bg-white">
+      <form onSubmit={handleSend} style={{
+        display: 'flex', gap: 8, padding: '0.5rem',
+        borderTop: '1px solid rgba(245,166,35,0.1)',
+      }}>
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your answer or question…"
+          placeholder={atLimit ? 'Session limit reached (10 turns)' : 'Type your answer or question…'}
           disabled={mutation.isPending || atLimit}
-          className="flex-1 text-sm px-3 py-2 rounded-xl border border-gray-200 focus:border-amber-400 focus:ring-1 focus:ring-amber-100 outline-none disabled:bg-gray-50 disabled:text-gray-400"
+          style={{
+            flex: 1,
+            background: 'rgba(245,166,35,0.03)',
+            border: '1px solid rgba(245,166,35,0.2)',
+            borderRadius: 2,
+            padding: '0.45rem 0.75rem',
+            color: 'var(--text)',
+            fontFamily: "'Rajdhani',sans-serif",
+            fontSize: 13,
+            outline: 'none',
+          }}
         />
         <button
           type="submit"
           disabled={!input.trim() || mutation.isPending || atLimit}
-          className="w-8 h-8 flex items-center justify-center rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-gray-200 text-white transition-colors flex-shrink-0"
+          style={{
+            width: 32, height: 32, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(245,166,35,0.15)',
+            border: '1px solid rgba(245,166,35,0.4)',
+            borderRadius: 2, cursor: 'pointer',
+            color: 'var(--amber)', transition: 'all 0.2s',
+            opacity: (!input.trim() || mutation.isPending || atLimit) ? 0.4 : 1,
+          }}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
           </svg>
         </button>
       </form>
-      {atLimit && (
-        <p className="text-xs text-center text-amber-600 pb-2">Session limit reached (10 turns)</p>
-      )}
     </div>
   )
 }

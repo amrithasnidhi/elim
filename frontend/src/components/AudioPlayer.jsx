@@ -17,11 +17,8 @@ export default function AudioPlayer({ historyId }) {
   const requestMutation = useMutation({
     mutationFn: () => api.post('/explain/audio', { history_id: historyId }).then((r) => r.data),
     onSuccess: (data) => {
-      if (data.audio_url) {
-        setAudioUrl(data.audio_url)
-      } else if (data.job_id) {
-        setJobId(data.job_id)
-      }
+      if (data.audio_url) setAudioUrl(data.audio_url)
+      else if (data.job_id) setJobId(data.job_id)
     },
     onError: (err) => toast.error(err.response?.data?.detail || 'Audio generation failed'),
   })
@@ -38,7 +35,7 @@ export default function AudioPlayer({ historyId }) {
       if (data.status === 'done' && data.audio_url) {
         setAudioUrl(data.audio_url)
         setJobId(null)
-        toast.success('Audio ready!')
+        toast.success('AUDIO READY')
       }
       if (data.status === 'failed') {
         toast.error(data.error || 'Audio generation failed')
@@ -53,11 +50,7 @@ export default function AudioPlayer({ historyId }) {
 
   const togglePlay = () => {
     if (!audioRef.current) return
-    if (playing) {
-      audioRef.current.pause()
-    } else {
-      audioRef.current.play()
-    }
+    playing ? audioRef.current.pause() : audioRef.current.play()
     setPlaying(!playing)
   }
 
@@ -84,26 +77,31 @@ export default function AudioPlayer({ historyId }) {
         type="button"
         onClick={() => requestMutation.mutate()}
         disabled={isLoading}
-        className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-700 font-medium px-3 py-2 rounded-xl hover:bg-indigo-50 transition-all disabled:opacity-50"
+        className="cyber-btn-ghost"
+        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
       >
         {isLoading ? (
-          <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          <svg style={{ animation: 'spinCW 1s linear infinite' }} width="12" height="12" fill="none" viewBox="0 0 24 24">
+            <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
           </svg>
         ) : (
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
               d="M15.536 8.464a5 5 0 010 7.072M12 6a7 7 0 010 12M8.464 8.464a5 5 0 000 7.072" />
           </svg>
         )}
-        {isLoading ? 'Generating audio…' : 'Listen'}
+        {isLoading ? 'GENERATING…' : 'GENERATE_AUDIO'}
       </button>
     )
   }
 
   return (
-    <div className="bg-gray-50 rounded-xl border border-gray-100 p-3">
+    <div style={{
+      background: 'rgba(3,6,15,0.8)',
+      border: '1px solid rgba(0,229,255,0.15)',
+      borderRadius: 2, padding: '0.625rem',
+    }}>
       <audio
         ref={audioRef}
         src={audioUrl}
@@ -111,51 +109,71 @@ export default function AudioPlayer({ historyId }) {
         onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
         onEnded={() => setPlaying(false)}
       />
-      <div className="flex items-center gap-3">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {/* Play/pause */}
         <button
           type="button"
           onClick={togglePlay}
-          className="w-8 h-8 flex items-center justify-center rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex-shrink-0 transition-colors"
+          style={{
+            width: 28, height: 28, flexShrink: 0, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,229,255,0.15)',
+            border: '1px solid rgba(0,229,255,0.4)',
+            cursor: 'pointer', color: 'var(--cyan)',
+          }}
         >
           {playing ? (
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <svg width="10" height="10" fill="currentColor" viewBox="0 0 24 24">
               <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
             </svg>
           ) : (
-            <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+            <svg width="10" height="10" fill="currentColor" viewBox="0 0 24 24" style={{ marginLeft: 1 }}>
               <path d="M8 5v14l11-7z"/>
             </svg>
           )}
         </button>
 
         {/* Progress bar */}
-        <div className="flex-1 flex flex-col gap-0.5">
+        <div style={{ flex: 1 }}>
           <div
-            className="h-1.5 bg-gray-200 rounded-full cursor-pointer"
+            className="weight-bar-track"
+            style={{ cursor: 'pointer', borderRadius: 2 }}
             onClick={handleScrub}
           >
             <div
-              className="h-full bg-indigo-500 rounded-full transition-all"
-              style={{ width: `${progress}%` }}
+              className="weight-bar-fill"
+              style={{
+                width: `${progress}%`,
+                background: 'var(--cyan)',
+                boxShadow: '0 0 6px rgba(0,229,255,0.4)',
+              }}
             />
           </div>
-          <div className="flex justify-between text-xs text-gray-400">
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            fontFamily: "'Share Tech Mono',monospace",
+            fontSize: 8, color: 'var(--dim)', marginTop: 3,
+          }}>
             <span>{fmt(audioRef.current?.currentTime || 0)}</span>
             <span>{fmt(duration)}</span>
           </div>
         </div>
 
-        {/* Speed selector */}
-        <div className="flex items-center gap-0.5">
+        {/* Speed */}
+        <div style={{ display: 'flex', gap: 2 }}>
           {SPEEDS.map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => setSpeed(s)}
-              className={`text-xs px-1.5 py-0.5 rounded transition-all ${
-                speed === s ? 'bg-indigo-100 text-indigo-700 font-semibold' : 'text-gray-400 hover:text-gray-700'
-              }`}
+              style={{
+                fontFamily: "'Share Tech Mono',monospace",
+                fontSize: 8, padding: '2px 4px', borderRadius: 1,
+                background: speed === s ? 'rgba(0,229,255,0.15)' : 'transparent',
+                border: speed === s ? '1px solid rgba(0,229,255,0.4)' : '1px solid transparent',
+                color: speed === s ? 'var(--cyan)' : 'var(--dim)',
+                cursor: 'pointer',
+              }}
             >
               {s}×
             </button>
@@ -165,11 +183,13 @@ export default function AudioPlayer({ historyId }) {
         {/* Download */}
         <a
           href={audioUrl}
-          download={`elim-audio.mp3`}
-          className="text-gray-400 hover:text-gray-700 transition-colors"
+          download="elim-audio.mp3"
+          style={{ color: 'var(--dim)', transition: 'color 0.2s' }}
+          onMouseEnter={e => e.currentTarget.style.color = 'var(--cyan)'}
+          onMouseLeave={e => e.currentTarget.style.color = 'var(--dim)'}
           title="Download"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
           </svg>
         </a>

@@ -27,7 +27,17 @@ export default function App() {
           position="top-right"
           toastOptions={{
             duration: 3000,
-            style: { borderRadius: '10px', fontSize: '14px' },
+            style: {
+              background: 'rgba(7,13,26,0.95)',
+              border: '1px solid rgba(0,229,255,0.25)',
+              borderRadius: 2,
+              color: '#E8F4FF',
+              fontFamily: "'Share Tech Mono',monospace",
+              fontSize: '11px',
+              letterSpacing: '0.08em',
+              backdropFilter: 'blur(20px)',
+              boxShadow: '0 0 30px rgba(0,229,255,0.08)',
+            },
           }}
         />
         <Navbar />

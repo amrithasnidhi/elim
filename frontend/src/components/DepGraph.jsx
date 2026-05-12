@@ -6,13 +6,37 @@ function TopicPill({ topic, explored, onClick }) {
     <button
       type="button"
       onClick={() => onClick?.(topic)}
-      className={`block w-full text-left text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
-        explored
-          ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
-          : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700'
-      }`}
+      style={{
+        display: 'block', width: '100%', textAlign: 'left',
+        fontFamily: "'Share Tech Mono',monospace",
+        fontSize: 9, letterSpacing: '0.1em',
+        padding: '5px 8px', borderRadius: 2,
+        cursor: 'pointer', transition: 'all 0.2s',
+        marginBottom: 4,
+        ...(explored ? {
+          background: 'rgba(0,255,157,0.06)',
+          border: '1px solid rgba(0,255,157,0.3)',
+          color: 'var(--green)',
+        } : {
+          background: 'rgba(0,229,255,0.02)',
+          border: '1px solid rgba(0,229,255,0.1)',
+          color: 'var(--sub)',
+        }),
+      }}
+      onMouseEnter={e => {
+        if (!explored) {
+          e.currentTarget.style.borderColor = 'rgba(0,229,255,0.3)'
+          e.currentTarget.style.color = 'var(--cyan)'
+        }
+      }}
+      onMouseLeave={e => {
+        if (!explored) {
+          e.currentTarget.style.borderColor = 'rgba(0,229,255,0.1)'
+          e.currentTarget.style.color = 'var(--sub)'
+        }
+      }}
     >
-      {explored && <span className="mr-1.5">✓</span>}
+      {explored && '✓ '}
       {topic}
     </button>
   )
@@ -29,93 +53,120 @@ export default function DepGraph({ topic, onTopicSelect }) {
 
   if (isLoading) {
     return (
-      <div className="h-32 flex items-center justify-center text-gray-400 text-sm">
-        Loading dependency graph…
+      <div style={{
+        height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: "'Share Tech Mono',monospace",
+        fontSize: 9, letterSpacing: '0.1em', color: 'var(--dim)',
+      }}>
+        LOADING DEPENDENCY GRAPH…
       </div>
     )
   }
 
   if (error || !data) {
     return (
-      <p className="text-sm text-red-500 py-4 text-center">
-        Could not load dependency graph
+      <p style={{
+        fontFamily: "'Share Tech Mono',monospace",
+        fontSize: 9, color: '#ff4466', textAlign: 'center', padding: '1rem 0',
+      }}>
+        GRAPH_LOAD_ERROR
       </p>
     )
   }
 
-  const hasAny =
-    data.prerequisites.length > 0 || data.next_topics.length > 0 || data.related.length > 0
+  const hasAny = data.prerequisites.length > 0 || data.next_topics.length > 0 || data.related.length > 0
 
   if (!hasAny) {
     return (
-      <p className="text-sm text-gray-400 py-4 text-center">
-        No dependency data available for "{topic}"
+      <p style={{
+        fontFamily: "'Share Tech Mono',monospace",
+        fontSize: 9, color: 'var(--dim)', textAlign: 'center', padding: '1rem 0',
+      }}>
+        NO_GRAPH_DATA for "{topic}"
       </p>
     )
   }
 
+  const colLabel = (text, align = 'left') => (
+    <p style={{
+      fontFamily: "'Share Tech Mono',monospace",
+      fontSize: 9, letterSpacing: '0.14em', color: 'var(--dim)',
+      textTransform: 'uppercase', marginBottom: 8,
+      textAlign: align,
+    }}>
+      {text}
+    </p>
+  )
+
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-3 items-start">
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '1rem', alignItems: 'start' }}>
         {/* Prerequisites */}
         <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-            </svg>
-            Prerequisites
-          </p>
-          <div className="space-y-1.5">
-            {data.prerequisites.length === 0 ? (
-              <span className="text-xs text-gray-300 italic">None</span>
-            ) : (
-              data.prerequisites.map((item) => (
-                <TopicPill key={item.topic} topic={item.topic} explored={item.explored} onClick={onTopicSelect} />
-              ))
-            )}
-          </div>
+          {colLabel('◀ PREREQUISITES')}
+          {data.prerequisites.length === 0 ? (
+            <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 9, color: 'var(--dim)', fontStyle: 'italic' }}>none</span>
+          ) : (
+            data.prerequisites.map((item) => (
+              <TopicPill key={item.topic} topic={item.topic} explored={item.explored} onClick={onTopicSelect} />
+            ))
+          )}
         </div>
 
-        {/* Current topic */}
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-full rounded-xl border-2 border-indigo-500 bg-indigo-50 px-3 py-3 text-center">
-            <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-0.5">Current</p>
-            <p className="text-sm font-bold text-indigo-900 leading-tight">{topic}</p>
+        {/* Current */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minWidth: 120 }}>
+          <div style={{
+            width: '100%',
+            background: 'rgba(0,229,255,0.06)',
+            border: '2px solid rgba(0,229,255,0.4)',
+            borderRadius: 2, padding: '0.625rem',
+            textAlign: 'center',
+          }}>
+            <p style={{
+              fontFamily: "'Share Tech Mono',monospace",
+              fontSize: 8, letterSpacing: '0.14em', color: 'var(--sub)', marginBottom: 3,
+            }}>
+              CURRENT
+            </p>
+            <p style={{
+              fontFamily: "'Orbitron',monospace",
+              fontSize: 11, fontWeight: 700, color: 'var(--cyan)',
+              lineHeight: 1.2,
+            }}>
+              {topic.toUpperCase()}
+            </p>
           </div>
           {data.related.length > 0 && (
-            <div className="w-full">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5 text-center">Related</p>
-              <div className="space-y-1.5">
-                {data.related.map((item) => (
-                  <TopicPill key={item.topic} topic={item.topic} explored={item.explored} onClick={onTopicSelect} />
-                ))}
-              </div>
+            <div style={{ width: '100%' }}>
+              {colLabel('RELATED', 'center')}
+              {data.related.map((item) => (
+                <TopicPill key={item.topic} topic={item.topic} explored={item.explored} onClick={onTopicSelect} />
+              ))}
             </div>
           )}
         </div>
 
-        {/* Next topics */}
+        {/* Next */}
         <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1 justify-end">
-            Up next
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-            </svg>
-          </p>
-          <div className="space-y-1.5">
-            {data.next_topics.length === 0 ? (
-              <span className="text-xs text-gray-300 italic">You're at the frontier!</span>
-            ) : (
-              data.next_topics.map((item) => (
-                <TopicPill key={item.topic} topic={item.topic} explored={item.explored} onClick={onTopicSelect} />
-              ))
-            )}
-          </div>
+          {colLabel('UP NEXT ▶', 'right')}
+          {data.next_topics.length === 0 ? (
+            <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 9, color: 'var(--green)', display: 'block', textAlign: 'right' }}>
+              FRONTIER REACHED
+            </span>
+          ) : (
+            data.next_topics.map((item) => (
+              <TopicPill key={item.topic} topic={item.topic} explored={item.explored} onClick={onTopicSelect} />
+            ))
+          )}
         </div>
       </div>
 
-      <p className="text-xs text-gray-400 text-center">
-        Green = already explored · Click any topic to learn it next
+      <p style={{
+        fontFamily: "'Share Tech Mono',monospace",
+        fontSize: 8, letterSpacing: '0.1em', color: 'var(--dim)',
+        textAlign: 'center', marginTop: 10,
+      }}>
+        GREEN = EXPLORED · CLICK ANY TOPIC TO LEARN IT NEXT
       </p>
     </div>
   )

@@ -25,7 +25,7 @@ html, body, #root {
   background: var(--void);
   color: var(--text);
   font-family: 'Rajdhani', sans-serif;
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.5;
   overflow-x: hidden;
 }
@@ -156,10 +156,10 @@ body::before {
   background: transparent;
   border: 1px solid rgba(0,229,255,0.4);
   border-radius: 2px;
-  padding: 0.8rem 1.5rem;
+  padding: 0.85rem 1.5rem;
   color: var(--cyan);
   font-family: 'Orbitron', monospace;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.2em;
   cursor: pointer;
@@ -182,10 +182,10 @@ body::before {
   background: transparent;
   border: 1px solid rgba(0,229,255,0.15);
   border-radius: 2px;
-  padding: 4px 10px;
+  padding: 5px 12px;
   color: var(--sub);
   font-family: 'Share Tech Mono', monospace;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   cursor: pointer;
   transition: all 0.2s;
@@ -196,8 +196,8 @@ body::before {
 /* ── MONO LABEL ── */
 .mono-label {
   font-family: 'Share Tech Mono', monospace;
-  font-size: 10px;
-  letter-spacing: 0.18em;
+  font-size: 11px;
+  letter-spacing: 0.16em;
   color: var(--sub);
   text-transform: uppercase;
   margin-bottom: 0.5rem;
@@ -240,5 +240,5 @@ body::before {
   border-top:1px solid rgba(0,229,255,0.08);
   background:rgba(1,2,8,0.7);
   font-family:'Share Tech Mono',monospace;
-  font-size:9px; color:var(--dim); letter-spacing:0.12em;
+  font-size:11px; color:var(--dim); letter-spacing:0.12em;
 }

@@ -33,44 +33,90 @@ export default function ChatThread({ historyId, topic }) {
     mutation.mutate(q)
   }
 
+  const turns = Math.ceil(messages.length / 2)
+  const atLimit = turns >= 5
+
   return (
-    <div className="flex flex-col bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+    <div style={{
+      background: 'rgba(3,6,15,0.8)',
+      border: '1px solid rgba(0,229,255,0.15)',
+      borderRadius: 2, overflow: 'hidden',
+    }}>
       {/* Header */}
-      <div className="px-4 py-2.5 border-b border-gray-100 flex items-center gap-2">
-        <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div style={{
+        padding: '0.5rem 1rem',
+        borderBottom: '1px solid rgba(0,229,255,0.1)',
+        display: 'flex', alignItems: 'center', gap: 8,
+        background: 'rgba(0,229,255,0.02)',
+      }}>
+        <svg width="12" height="12" fill="none" stroke="var(--cyan)" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Ask a follow-up</span>
+        <span style={{
+          fontFamily: "'Share Tech Mono',monospace",
+          fontSize: 9, letterSpacing: '0.16em', color: 'var(--sub)',
+        }}>
+          FOLLOW_UP_THREAD
+        </span>
         {messages.length > 0 && (
-          <span className="ml-auto text-xs text-gray-400">{Math.ceil(messages.length / 2)}/5 turns</span>
+          <span style={{
+            marginLeft: 'auto',
+            fontFamily: "'Share Tech Mono',monospace",
+            fontSize: 9, color: 'var(--dim)',
+          }}>
+            {turns}/5
+          </span>
         )}
       </div>
 
       {/* Messages */}
       {messages.length > 0 && (
-        <div className="max-h-72 overflow-y-auto px-4 py-3 space-y-3">
+        <div style={{ maxHeight: 280, overflowY: 'auto', padding: '0.75rem 1rem' }}>
           {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div
-                className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'bg-indigo-600 text-white rounded-br-sm'
-                    : 'bg-white border border-gray-100 text-gray-700 rounded-bl-sm shadow-sm'
-                }`}
-              >
+            <div key={i} style={{
+              display: 'flex',
+              justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+              marginBottom: 8,
+            }}>
+              <div style={{
+                maxWidth: '80%',
+                padding: '0.5rem 0.875rem',
+                borderRadius: 2,
+                fontSize: 13,
+                lineHeight: 1.6,
+                fontFamily: "'Rajdhani',sans-serif",
+                ...(msg.role === 'user' ? {
+                  background: 'rgba(0,229,255,0.12)',
+                  border: '1px solid rgba(0,229,255,0.3)',
+                  color: 'var(--cyan)',
+                } : {
+                  background: 'rgba(7,13,26,0.9)',
+                  border: '1px solid rgba(0,229,255,0.1)',
+                  color: 'var(--text)',
+                }),
+              }}>
                 {msg.content}
               </div>
             </div>
           ))}
           {mutation.isPending && (
-            <div className="flex justify-start">
-              <div className="bg-white border border-gray-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
-                <div className="flex gap-1 items-center">
-                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 8 }}>
+              <div style={{
+                padding: '0.5rem 0.875rem',
+                background: 'rgba(7,13,26,0.9)',
+                border: '1px solid rgba(0,229,255,0.1)',
+                borderRadius: 2,
+                display: 'flex', gap: 4, alignItems: 'center',
+              }}>
+                {[0, 150, 300].map((d) => (
+                  <span key={d} style={{
+                    width: 5, height: 5, borderRadius: '50%',
+                    background: 'var(--cyan)',
+                    display: 'inline-block',
+                    animation: `blink 1.2s ${d}ms ease-in-out infinite`,
+                  }} />
+                ))}
               </div>
             </div>
           )}
@@ -79,28 +125,37 @@ export default function ChatThread({ historyId, topic }) {
       )}
 
       {/* Input */}
-      <form onSubmit={handleSend} className="flex items-center gap-2 px-3 py-2.5 border-t border-gray-100 bg-white">
+      <form onSubmit={handleSend} style={{
+        display: 'flex', gap: 8, padding: '0.5rem',
+        borderTop: messages.length > 0 ? '1px solid rgba(0,229,255,0.08)' : 'none',
+      }}>
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={`Ask anything about ${topic}…`}
-          disabled={mutation.isPending || Math.ceil(messages.length / 2) >= 5}
-          className="flex-1 text-sm px-3 py-2 rounded-xl border border-gray-200 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 outline-none disabled:bg-gray-50 disabled:text-gray-400"
+          placeholder={atLimit ? 'Conversation limit reached' : `Ask about ${topic}…`}
+          disabled={mutation.isPending || atLimit}
+          className="cyber-input"
+          style={{ padding: '0.45rem 0.75rem', fontSize: 13 }}
         />
         <button
           type="submit"
-          disabled={!input.trim() || mutation.isPending || Math.ceil(messages.length / 2) >= 5}
-          className="w-8 h-8 flex items-center justify-center rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-200 text-white transition-colors flex-shrink-0"
+          disabled={!input.trim() || mutation.isPending || atLimit}
+          style={{
+            width: 32, height: 32, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,229,255,0.1)',
+            border: '1px solid rgba(0,229,255,0.3)',
+            borderRadius: 2, cursor: 'pointer',
+            color: 'var(--cyan)', transition: 'all 0.2s',
+            opacity: (!input.trim() || mutation.isPending || atLimit) ? 0.4 : 1,
+          }}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
           </svg>
         </button>
       </form>
-      {Math.ceil(messages.length / 2) >= 5 && (
-        <p className="text-xs text-center text-gray-400 pb-2">Conversation limit reached (5 turns)</p>
-      )}
     </div>
   )
 }

@@ -89,7 +89,7 @@ export default function Navbar() {
         {NAV_LINKS.filter(l => !l.auth || user).map(({ to, label }) => (
           <Link key={to} to={to} style={{
             fontFamily:"'Share Tech Mono',monospace",
-            fontSize:10, letterSpacing:'0.14em',
+            fontSize:12, letterSpacing:'0.12em',
             color: isActive(to) ? 'var(--cyan)' : 'var(--sub)',
             textShadow: isActive(to) ? '0 0 10px rgba(0,229,255,0.5)' : 'none',
             textDecoration:'none',
@@ -105,7 +105,7 @@ export default function Navbar() {
         {/* Clock */}
         <span style={{
           fontFamily:"'Share Tech Mono',monospace",
-          fontSize:9, color:'var(--green)', letterSpacing:'0.1em',
+          fontSize:11, color:'var(--green)', letterSpacing:'0.1em',
           display:'flex', alignItems:'center', gap:5,
         }}>
           <span style={{
@@ -148,7 +148,7 @@ export default function Navbar() {
               </div>
               <span style={{
                 fontFamily:"'Share Tech Mono',monospace",
-                fontSize:10, color:'var(--sub)', letterSpacing:'0.1em',
+                fontSize:12, color:'var(--sub)', letterSpacing:'0.08em',
               }}>
                 {user.name?.toUpperCase()}
               </span>
@@ -161,7 +161,7 @@ export default function Navbar() {
                 border:'1px solid rgba(0,229,255,0.15)',
                 borderRadius:2, padding:'3px 10px',
                 fontFamily:"'Share Tech Mono',monospace",
-                fontSize:9, color:'var(--dim)', letterSpacing:'0.12em',
+                fontSize:11, color:'var(--dim)', letterSpacing:'0.1em',
                 cursor:'pointer', transition:'all 0.2s',
                 textTransform:'uppercase',
               }}
@@ -175,14 +175,14 @@ export default function Navbar() {
           <>
             <Link to="/auth/login" style={{
               fontFamily:"'Share Tech Mono',monospace",
-              fontSize:10, color:'var(--sub)', letterSpacing:'0.12em', textDecoration:'none',
+              fontSize:12, color:'var(--sub)', letterSpacing:'0.1em', textDecoration:'none',
             }}>SIGN_IN</Link>
             <Link to="/auth/register" style={{
               background:'rgba(0,229,255,0.08)',
               border:'1px solid rgba(0,229,255,0.4)',
-              borderRadius:2, padding:'5px 14px',
+              borderRadius:2, padding:'6px 16px',
               fontFamily:"'Orbitron',monospace",
-              fontSize:9, fontWeight:700, color:'var(--cyan)',
+              fontSize:10, fontWeight:700, color:'var(--cyan)',
               letterSpacing:'0.15em', textDecoration:'none',
               transition:'all 0.2s',
             }}
