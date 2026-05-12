@@ -470,11 +470,11 @@ Set `VITE_API_URL` to your Railway backend URL in Vercel environment variables.
 - [x] Phase 1 — MVP: topic input + LLM explanation
 - [x] Phase 2 — User auth + profile system
 - [x] Phase 3 — Feedback loop + style_weights adaptation
-- [x] Phase 4 — Multi-style parallel output
-- [ ] Phase 5 — MCP knowledge integration
-- [ ] Phase 6 — Full RAG pipeline (ChromaDB + incremental indexing)
-- [ ] Phase 7 — Multi-modal output (TTS, diagrams, voice input, chat)
-- [ ] Phase 8 — Advanced features (Pace Detector, Socratic Mode, Spaced Repetition, Dependency Graph)
+- [x] Phase 4 — Multi-style parallel output + Compare page
+- [x] Phase 5 — MCP knowledge integration (Google Drive, Notion, GitHub, Slack, Web)
+- [x] Phase 6 — Full RAG pipeline (ChromaDB, embeddings, Celery indexing)
+- [x] Phase 7 — Multi-modal output (TTS, Mermaid diagrams, voice input, follow-up chat)
+- [x] Phase 8 — Advanced features (Pace Detector, Quality Scorer, Confusion Detector, Socratic Mode, Spaced Repetition SM-2, Concept Dependency Graph, Explanation Diff, Topic Recommendations, Peer Matching, Sentry)
 
 ---
 

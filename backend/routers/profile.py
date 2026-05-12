@@ -1,3 +1,4 @@
+import asyncio
 import difflib
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, Field
@@ -218,7 +219,3 @@ async def topic_recommendations(
     db = get_db()
     recs = await get_recommendations(db, user_id, limit=limit)
     return {"recommendations": recs}
-
-
-# asyncio needed for history_diff gather
-import asyncio
