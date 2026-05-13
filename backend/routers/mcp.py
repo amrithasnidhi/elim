@@ -15,7 +15,11 @@ from dependencies import get_current_user_id
 from services.mcp_manager import SOURCE_LABELS, encrypt_token
 from services.rag_pipeline import get_rag_pipeline
 
-router = APIRouter(prefix="/mcp", tags=["mcp"])
+router = APIRouter(
+    prefix="/mcp",
+    tags=["mcp"],
+    responses={401: {"description": "Not authenticated"}},
+)
 
 # Slack removed — not needed for Phase 1-8
 ALL_SOURCES = ["gdrive", "notion", "github", "web"]

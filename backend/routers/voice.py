@@ -10,14 +10,29 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
 from dependencies import get_current_user_id
 
-router = APIRouter(prefix="/voice", tags=["voice"])
+router = APIRouter(
+    prefix="/voice",
+    tags=["voice"],
+    responses={401: {"description": "Not authenticated"}, 503: {"description": "Gemini API not configured"}},
+)
 
 
-@router.post("/transcribe")
+@router.post(
+    "/transcribe",
+    summary="Transcribe audio to text",
+    description="Convert speech to text using Gemini's audio understanding.",
+)
 async def transcribe_audio(
-    audio: UploadFile = File(...),
+    audio: UploadFile = File(..., description="Audio file (webm, mp3, wav, etc.)"),
     user_id: str = Depends(get_current_user_id),
 ):
+    """
+    Transcribe audio input to text.
+
+    **Supported formats:** webm, mp3, wav, m4a, ogg
+
+    **Use case:** Voice input for topic queries instead of typing.
+    """
     gemini_key = os.getenv("GEMINI_API_KEY")
     if not gemini_key:
         raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured")

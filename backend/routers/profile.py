@@ -8,7 +8,11 @@ from typing import Optional
 from database import get_db
 from dependencies import get_current_user_id
 
-router = APIRouter(prefix="/profile", tags=["profile"])
+router = APIRouter(
+    prefix="/profile",
+    tags=["profile"],
+    responses={401: {"description": "Not authenticated"}, 404: {"description": "User not found"}},
+)
 
 VALID_STYLES = {"analogy", "step-by-step", "code-based", "auto"}
 
@@ -35,8 +39,20 @@ def _serialize_user(user: dict) -> dict:
     }
 
 
-@router.get("")
+@router.get(
+    "",
+    summary="Get user profile",
+    description="Retrieve the authenticated user's profile and learning preferences.",
+)
 async def get_profile(user_id: str = Depends(get_current_user_id)):
+    """
+    Get current user's profile including:
+    - Learning style preferences and weights
+    - Difficulty level
+    - Topic history
+    - Connected knowledge sources
+    - Spaced repetition due count
+    """
     db = get_db()
     user = await db.users.find_one({"_id": ObjectId(user_id)})
     if not user:

@@ -13,7 +13,14 @@ from services.mcp_manager import MCPManager
 from services.rag_pipeline import get_rag_pipeline
 from services.llm_service import call_llm, is_llm_available, LLMResponse
 
-router = APIRouter(prefix="/explain", tags=["explain"])
+router = APIRouter(
+    prefix="/explain",
+    tags=["explain"],
+    responses={
+        500: {"description": "LLM provider not configured"},
+        502: {"description": "LLM API error"},
+    },
+)
 
 STYLE_INSTRUCTIONS = {
     "analogy": "Use real-world analogies and comparisons to everyday objects or situations. Make abstract concepts tangible.",
@@ -139,33 +146,62 @@ async def _save_history(
 # ── Models ──────────────────────────────────────────────────────────────────
 
 class ExplainRequest(BaseModel):
-    topic: str = Field(..., min_length=1, max_length=500)
-    style: Optional[str] = Field(default=None, pattern="^(analogy|step-by-step|code-based)$")
-    difficulty: Optional[int] = Field(default=None, ge=1, le=5)
+    """Request to generate an explanation."""
+    topic: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="The topic or concept to explain",
+        examples=["recursion", "binary search", "machine learning"],
+    )
+    style: Optional[str] = Field(
+        default=None,
+        pattern="^(analogy|step-by-step|code-based)$",
+        description="Explanation style. If omitted, uses user's preferred style.",
+    )
+    difficulty: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=5,
+        description="Difficulty level (1=beginner, 5=expert). If omitted, uses user's level.",
+    )
+
+    model_config = {"json_schema_extra": {"examples": [{"topic": "recursion", "style": "analogy", "difficulty": 2}]}}
+
+
+class QualityScores(BaseModel):
+    """Quality assessment scores for an explanation."""
+    clarity: float = Field(..., description="Clarity score (1-5)")
+    accuracy: float = Field(..., description="Accuracy score (1-5)")
+    style_fit: float = Field(..., description="Style adherence score (1-5)")
+    avg: float = Field(..., description="Average of all scores")
 
 
 class ExplainResponse(BaseModel):
-    explanation: str
-    followup: str
-    style: str
-    topic: str
-    history_id: Optional[str] = None
-    quality: Optional[dict] = None
+    """Generated explanation response."""
+    explanation: str = Field(..., description="The generated explanation text")
+    followup: str = Field(..., description="Suggested follow-up question")
+    style: str = Field(..., description="Style used for this explanation")
+    topic: str = Field(..., description="Original topic requested")
+    history_id: Optional[str] = Field(None, description="ID to reference this explanation later")
+    quality: Optional[dict] = Field(None, description="Quality assessment scores")
 
 
 class StyleResult(BaseModel):
-    explanation: str
-    followup: str
-    history_id: Optional[str] = None
-    error: Optional[str] = None
+    """Result for a single style in multi-style response."""
+    explanation: str = Field(..., description="Generated explanation")
+    followup: str = Field(..., description="Follow-up question")
+    history_id: Optional[str] = Field(None, description="History ID for this explanation")
+    error: Optional[str] = Field(None, description="Error message if generation failed")
 
 
 class MultiStyleResponse(BaseModel):
-    topic: str
-    difficulty: int
-    analogy: StyleResult
-    step_by_step: StyleResult
-    code_based: StyleResult
+    """Response containing explanations in all three styles."""
+    topic: str = Field(..., description="The topic explained")
+    difficulty: int = Field(..., description="Difficulty level used")
+    analogy: StyleResult = Field(..., description="Analogy-style explanation")
+    step_by_step: StyleResult = Field(..., description="Step-by-step explanation")
+    code_based: StyleResult = Field(..., description="Code-based explanation")
 
 
 # ── MCP context helper ───────────────────────────────────────────────────────
@@ -205,11 +241,37 @@ async def _load_mcp_context(user: dict, topic: str) -> tuple[str, list[str], lis
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
-@router.post("/generate", response_model=ExplainResponse)
+@router.post(
+    "/generate",
+    response_model=ExplainResponse,
+    summary="Generate explanation",
+    description="Generate a personalized explanation for a topic using AI.",
+)
 async def generate_explanation(
     body: ExplainRequest,
     user_id: Optional[str] = Depends(get_optional_user_id),
 ):
+    """
+    Generate an AI-powered explanation for any topic.
+
+    **Features:**
+    - Uses user's preferred style and difficulty if not specified
+    - Pulls context from connected knowledge sources (Google Drive, Notion, GitHub)
+    - Quality-checked with automatic retry if score < 3.0
+    - Saves to history for authenticated users
+
+    **Styles:**
+    - `analogy`: Real-world comparisons and metaphors
+    - `step-by-step`: Numbered, methodical breakdown
+    - `code-based`: Working code examples (Python preferred)
+
+    **Difficulty Levels:**
+    - 1: Complete beginner
+    - 2: Beginner with basic awareness
+    - 3: Intermediate
+    - 4: Advanced
+    - 5: Expert
+    """
     if not is_llm_available():
         raise HTTPException(status_code=500, detail="No LLM provider configured. Set ANTHROPIC_API_KEY or GROQ_API_KEY.")
 
@@ -265,11 +327,26 @@ async def generate_explanation(
     )
 
 
-@router.post("/multi-style", response_model=MultiStyleResponse)
+@router.post(
+    "/multi-style",
+    response_model=MultiStyleResponse,
+    summary="Generate explanations in all styles",
+    description="Generate explanations in analogy, step-by-step, and code-based styles simultaneously.",
+)
 async def multi_style_explanation(
     body: ExplainRequest,
     user_id: Optional[str] = Depends(get_optional_user_id),
 ):
+    """
+    Generate explanations in all three styles for comparison.
+
+    Useful for:
+    - Finding which style resonates best with the user
+    - Comprehensive understanding from multiple angles
+    - Training the adaptive style weights through feedback
+
+    **Note:** The `style` field in the request is ignored; all styles are generated.
+    """
     if not is_llm_available():
         raise HTTPException(status_code=500, detail="No LLM provider configured. Set ANTHROPIC_API_KEY or GROQ_API_KEY.")
 
@@ -343,11 +420,24 @@ async def multi_style_explanation(
 # ── Audio TTS ─────────────────────────────────────────────────────────────────
 
 class AudioRequest(BaseModel):
-    history_id: str
+    """Request to generate audio for an explanation."""
+    history_id: str = Field(..., description="ID of the explanation to convert to speech")
 
 
-@router.post("/audio")
+@router.post(
+    "/audio",
+    summary="Generate audio (TTS)",
+    description="Convert an explanation to speech using ElevenLabs or Gemini TTS.",
+)
 async def request_audio(body: AudioRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Request text-to-speech generation for an explanation.
+
+    - Returns cached `audio_url` if already generated
+    - Otherwise starts async job and returns `job_id`
+    - Use `GET /explain/audio/{job_id}` to poll for completion
+    - Requires Redis and Celery worker running
+    """
     db = get_db()
     history = await db.history.find_one({"_id": ObjectId(body.history_id)})
     if not history:
@@ -366,8 +456,21 @@ async def request_audio(body: AudioRequest, user_id: str = Depends(get_current_u
         raise HTTPException(status_code=503, detail="Celery worker not available — start Redis and the worker first")
 
 
-@router.get("/audio/{job_id}")
+@router.get(
+    "/audio/{job_id}",
+    summary="Check audio generation status",
+    description="Poll the status of an audio generation job.",
+)
 async def audio_status(job_id: str, user_id: str = Depends(get_current_user_id)):
+    """
+    Check status of TTS job.
+
+    **Status values:**
+    - `queued`: Job is waiting to start
+    - `generating`: Audio is being generated
+    - `done`: Audio ready, `audio_url` provided
+    - `failed`: Generation failed, `error` provided
+    """
     try:
         from workers.celery_app import celery_app
         result = celery_app.AsyncResult(job_id)
@@ -389,11 +492,23 @@ async def audio_status(job_id: str, user_id: str = Depends(get_current_user_id))
 # ── Diagram ───────────────────────────────────────────────────────────────────
 
 class DiagramRequest(BaseModel):
-    history_id: str
+    """Request to generate a diagram for an explanation."""
+    history_id: str = Field(..., description="ID of the explanation to visualize")
 
 
-@router.post("/diagram")
+@router.post(
+    "/diagram",
+    summary="Generate Mermaid diagram",
+    description="Generate a Mermaid.js diagram visualizing the concept.",
+)
 async def generate_diagram(body: DiagramRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Generate a visual diagram for a topic using Mermaid.js syntax.
+
+    - Returns cached diagram if already generated
+    - Creates flowchart or graph suitable for the concept
+    - Returns raw Mermaid code (render on frontend)
+    """
     db = get_db()
     history = await db.history.find_one({"_id": ObjectId(body.history_id)})
     if not history:
@@ -452,11 +567,16 @@ async def _get_redis():
 
 
 class FollowupRequest(BaseModel):
-    history_id: str
-    question: str = Field(..., min_length=1, max_length=1000)
+    """Request to ask a follow-up question."""
+    history_id: str = Field(..., description="ID of the explanation to follow up on")
+    question: str = Field(..., min_length=1, max_length=1000, description="Your follow-up question")
 
 
-@router.post("/followup")
+@router.post(
+    "/followup",
+    summary="Ask follow-up question",
+    description="Continue the conversation about an explanation with follow-up questions.",
+)
 async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_current_user_id)):
     db = get_db()
     history = await db.history.find_one({"_id": ObjectId(body.history_id)})
@@ -546,15 +666,32 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
 # ── Socratic mode ─────────────────────────────────────────────────────────────
 
 class SocraticRequest(BaseModel):
-    topic: str = Field(..., min_length=1, max_length=500)
-    difficulty: Optional[int] = Field(default=2, ge=1, le=5)
+    """Request to start a Socratic learning session."""
+    topic: str = Field(..., min_length=1, max_length=500, description="Topic to explore through Socratic dialogue")
+    difficulty: Optional[int] = Field(default=2, ge=1, le=5, description="Student's knowledge level")
 
 
-@router.post("/socratic")
+@router.post(
+    "/socratic",
+    summary="Start Socratic session",
+    description="Begin a guided discovery session where the AI asks questions instead of explaining directly.",
+)
 async def start_socratic(body: SocraticRequest, user_id: str = Depends(get_current_user_id)):
     """
-    Begin a Socratic learning session. Returns an opening question and a session history_id
-    that can be used with POST /explain/followup to continue the Socratic dialogue.
+    Start a Socratic learning session.
+
+    Instead of explaining directly, the AI asks thought-provoking questions
+    to guide the student to discover the concept themselves.
+
+    **How it works:**
+    1. Call this endpoint to get an opening question and `history_id`
+    2. Use `POST /explain/followup` with the `history_id` to continue the dialogue
+    3. The AI will guide with questions, hints, and confirmations
+
+    **Returns:**
+    - `opening_question`: First Socratic question to consider
+    - `history_id`: Use this for follow-up interactions
+    - `topic`: The topic being explored
     """
     if not is_llm_available():
         raise HTTPException(status_code=500, detail="No LLM provider configured")

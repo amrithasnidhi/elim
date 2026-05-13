@@ -12,26 +12,44 @@ from services.auth import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# Response models for better Swagger docs
+from typing import Dict, Any
+
 DEFAULT_STYLE_WEIGHTS = {"analogy": 0.33, "step-by-step": 0.33, "code-based": 0.34}
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(..., min_length=8)
-    name: str = Field(..., min_length=1, max_length=100)
+    """User registration request."""
+    email: EmailStr = Field(..., description="User's email address", examples=["user@example.com"])
+    password: str = Field(..., min_length=8, description="Password (min 8 characters)")
+    name: str = Field(..., min_length=1, max_length=100, description="Display name", examples=["John Doe"])
+
+    model_config = {"json_schema_extra": {"examples": [{"email": "user@example.com", "password": "securepassword123", "name": "John Doe"}]}}
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+    """User login request."""
+    email: EmailStr = Field(..., description="Registered email address")
+    password: str = Field(..., description="Account password")
+
+    model_config = {"json_schema_extra": {"examples": [{"email": "user@example.com", "password": "securepassword123"}]}}
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    """Token refresh request."""
+    refresh_token: str = Field(..., description="Valid refresh token from login/register")
 
 
 class LogoutRequest(BaseModel):
-    refresh_token: str
+    """Logout request."""
+    refresh_token: str = Field(..., description="Refresh token to invalidate")
+
+
+class AuthResponse(BaseModel):
+    """Authentication response with tokens and user info."""
+    access_token: str = Field(..., description="JWT access token (expires in 15 min)")
+    refresh_token: str = Field(..., description="Refresh token (expires in 7 days)")
+    user: Dict[str, Any] = Field(..., description="User profile information")
 
 
 def _user_response(user: dict) -> dict:
@@ -45,8 +63,21 @@ def _user_response(user: dict) -> dict:
     }
 
 
-@router.post("/register", status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    status_code=status.HTTP_201_CREATED,
+    response_model=AuthResponse,
+    summary="Register new user",
+    description="Create a new user account and return authentication tokens.",
+)
 async def register(body: RegisterRequest):
+    """
+    Register a new user account.
+
+    - Creates user with default preferences (auto style, difficulty level 2)
+    - Returns access token (15 min) and refresh token (7 days)
+    - Initializes empty MCP sources and learning history
+    """
     db = get_db()
     if await db.users.find_one({"email": body.email}):
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -87,8 +118,20 @@ async def register(body: RegisterRequest):
     }
 
 
-@router.post("/login")
+@router.post(
+    "/login",
+    response_model=AuthResponse,
+    summary="User login",
+    description="Authenticate with email and password to receive access tokens.",
+)
 async def login(body: LoginRequest, request: Request):
+    """
+    Authenticate a user and return tokens.
+
+    - Validates email and password
+    - Creates new session with device info
+    - Returns access token (15 min) and refresh token (7 days)
+    """
     db = get_db()
     user = await db.users.find_one({"email": body.email})
     if not user or not verify_password(body.password, user["password_hash"]):
@@ -118,8 +161,19 @@ async def login(body: LoginRequest, request: Request):
     }
 
 
-@router.post("/refresh")
+@router.post(
+    "/refresh",
+    summary="Refresh access token",
+    description="Exchange a valid refresh token for a new access token.",
+)
 async def refresh(body: RefreshRequest):
+    """
+    Get a new access token using a refresh token.
+
+    - Validates refresh token and checks session exists
+    - Returns new access token (15 min expiry)
+    - Refresh token remains valid until logout or expiration
+    """
     db = get_db()
     user_id = decode_refresh_token(body.refresh_token)
     if not user_id:
@@ -134,8 +188,18 @@ async def refresh(body: RefreshRequest):
     return {"access_token": new_access}
 
 
-@router.post("/logout")
+@router.post(
+    "/logout",
+    summary="Logout user",
+    description="Invalidate the refresh token and end the session.",
+)
 async def logout(body: LogoutRequest):
+    """
+    Logout by invalidating the refresh token.
+
+    - Deletes the session from database
+    - Access token remains valid until expiration (15 min max)
+    """
     db = get_db()
     token_hash = hash_refresh_token(body.refresh_token)
     await db.sessions.delete_one({"refresh_token": token_hash})
