@@ -3,7 +3,6 @@ import hashlib
 import os
 from typing import Optional
 
-import anthropic
 from cryptography.fernet import Fernet, InvalidToken
 
 MCP_URLS: dict[str, str] = {
@@ -79,59 +78,12 @@ class MCPManager:
         return self._deduplicate(flat)
 
     async def _query_source(self, source: str, topic: str) -> list[dict]:
-        if source == "web":
-            return await self._web_search(topic)
-        token = self.tokens.get(source)
-        if not token:
-            return []
-        try:
-            client = anthropic.AsyncAnthropic()
-            resp = await client.beta.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=2000,
-                mcp_servers=[{
-                    "type": "url",
-                    "url": MCP_URLS[source],
-                    "name": source,
-                    "authorization_token": token,
-                }],
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        f"Search for and retrieve all content relevant to: {topic}. "
-                        "Return the raw text content found."
-                    ),
-                }],
-                betas=["mcp-client-2025-04-04"],
-            )
-            text = " ".join(b.text for b in resp.content if hasattr(b, "text")).strip()
-            if not text:
-                return []
-            return [{"text": text, "source": source, "trust": TRUST_WEIGHTS[source]}]
-        except Exception:
-            return []
+        # MCP source fetching requires Anthropic's beta MCP client API, unavailable with Groq
+        return []
 
     async def _web_search(self, topic: str) -> list[dict]:
-        try:
-            client = anthropic.AsyncAnthropic()
-            resp = await client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=1500,
-                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        f"Search for educational content about: {topic}. "
-                        "Focus on reliable sources like Wikipedia, MDN, GeeksForGeeks, ArXiv."
-                    ),
-                }],
-            )
-            text = " ".join(b.text for b in resp.content if hasattr(b, "text")).strip()
-            if not text:
-                return []
-            return [{"text": text, "source": "web", "trust": 0.60}]
-        except Exception:
-            return []
+        # Built-in web search requires Anthropic's web_search tool, unavailable with Groq
+        return []
 
     @staticmethod
     def _deduplicate(items: list[dict]) -> list[dict]:

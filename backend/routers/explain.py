@@ -1,10 +1,11 @@
 import json
+import re
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from bson import ObjectId
 from typing import Optional
-import anthropic
+from groq import AsyncGroq
 import asyncio
 import os
 
@@ -67,20 +68,19 @@ def _parse_response(raw: str, topic: str) -> tuple[str, str]:
 
 
 async def _call_llm(api_key: str, topic: str, style: str, difficulty: int, rag_context: str = "") -> dict:
-    """Single async LLM call. Scores quality with Haiku and retries once if avg < 3.0."""
+    """Single async LLM call. Scores quality with a fast model and retries once if avg < 3.0."""
     prompt = _build_prompt(topic, style, difficulty, rag_context)
 
     for attempt in range(MAX_QUALITY_RETRIES):
         try:
-            client = anthropic.AsyncAnthropic(api_key=api_key)
-            message = await client.messages.create(
-                model="claude-sonnet-4-5",
+            client = AsyncGroq(api_key=api_key)
+            message = await client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}],
             )
-            explanation, followup = _parse_response(message.content[0].text, topic)
+            explanation, followup = _parse_response(message.choices[0].message.content, topic)
 
-            # Quality gate — Haiku scores clarity/accuracy/style_fit
             from services.quality_scorer import score_explanation
             quality = await score_explanation(api_key, topic, style, explanation)
 
@@ -93,7 +93,6 @@ async def _call_llm(api_key: str, topic: str, style: str, difficulty: int, rag_c
                     "quality": quality,
                     "error": None,
                 }
-            # Retry with a more explicit prompt nudge
             prompt += f"\n\n[Previous attempt scored {quality['avg']:.1f}/5 — please improve clarity and depth.]"
         except Exception as e:
             return {"style": style, "explanation": "", "followup": "", "prompt": prompt, "quality": None, "error": str(e)}
@@ -210,9 +209,9 @@ async def generate_explanation(
     body: ExplainRequest,
     user_id: Optional[str] = Depends(get_optional_user_id),
 ):
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
 
     db = get_db()
     effective_style = body.style
@@ -271,9 +270,9 @@ async def multi_style_explanation(
     body: ExplainRequest,
     user_id: Optional[str] = Depends(get_optional_user_id),
 ):
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
 
     db = get_db()
     effective_difficulty = body.difficulty
@@ -406,30 +405,54 @@ async def generate_diagram(body: DiagramRequest, user_id: str = Depends(get_curr
     if history.get("diagram_code"):
         return {"diagram_code": history["diagram_code"]}
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
 
     topic = history["topic"]
-    prompt = f"""Generate a Mermaid.js diagram that visually represents the concept: "{topic}".
+    prompt = (
+        f'Generate a Mermaid.js flowchart for the concept: "{topic}".\n\n'
+        f"Output ONLY the raw Mermaid syntax — no markdown fences, no explanatory text.\n"
+        f"Start your response with exactly: flowchart TD\n\n"
+        f"Rules:\n"
+        f"- Use flowchart TD layout\n"
+        f"- 5-8 nodes maximum\n"
+        f"- Short labels (2-4 plain words, ASCII only)\n"
+        f"- Use --> for arrows\n"
+        f"- No subgraphs, no styling, no classDef\n\n"
+        f"Example format:\n"
+        f"flowchart TD\n"
+        f"    A[Start] --> B[Step 1]\n"
+        f"    B --> C[Step 2]\n"
+        f"    C --> D[End]"
+    )
 
-Rules:
-- Return ONLY raw Mermaid source — no markdown fences, no explanation text
-- Use flowchart TD or graph LR; pick whichever fits the concept better
-- Keep it concise: 5–10 nodes maximum
-- Labels must be short (2–5 words each)"""
-
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    message = await client.messages.create(
-        model="claude-sonnet-4-5",
+    client = AsyncGroq(api_key=api_key)
+    message = await client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
         max_tokens=512,
         messages=[{"role": "user", "content": prompt}],
     )
-    raw = message.content[0].text.strip()
+    raw = message.choices[0].message.content.strip()
 
-    if raw.startswith("```"):
-        lines = raw.splitlines()
-        raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+    # Extract clean Mermaid code — handle fences and preamble text
+    fence_match = re.search(r'```(?:mermaid)?\s*\n([\s\S]+?)(?:\n```|$)', raw)
+    if fence_match:
+        raw = fence_match.group(1).strip()
+    elif raw.startswith('`'):
+        raw = re.sub(r'^`+\w*\s*', '', raw).rstrip('`').strip()
+
+    # Find the first Mermaid keyword line and discard any preamble
+    mermaid_start = re.search(
+        r'^(flowchart|graph |sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap)',
+        raw, re.MULTILINE,
+    )
+    if mermaid_start:
+        raw = raw[mermaid_start.start():]
+
+    # Fix common LLM syntax mistake: -->|label|> should be -->|label|
+    raw = re.sub(r'\|>', '|', raw)
+
     diagram_code = raw.strip()
 
     await db.history.update_one(
@@ -469,9 +492,9 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
     if str(history["user_id"]) != user_id:
         raise HTTPException(status_code=403, detail="Not your history")
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
 
     chat_key = f"chat:{body.history_id}"
     is_socratic = history.get("style_used") == "socratic"
@@ -493,7 +516,6 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
 
     topic = history["topic"]
 
-    # Detect confusion — if highly confused, instruct the AI to re-explain simply
     confusion_note = ""
     try:
         from services.confusion_detector import detect_confusion
@@ -508,12 +530,17 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
 
     if is_socratic:
         system = (
-            f'You are a Socratic tutor guiding the student to discover "{topic}" through questions.\n'
+            f'You are a Socratic tutor. The student has chosen to study "{topic}" — they already know the topic name.\n'
+            f"Your goal is to guide them to discover the CONCEPTS, MECHANISMS, and PRINCIPLES that explain {topic}.\n\n"
             f"Rules:\n"
-            f"- Ask ONE guiding question at a time — never give the answer directly\n"
-            f"- If the student is on the right track, praise briefly and ask a deeper question\n"
-            f"- If the student is wrong, give a gentle hint and ask again\n"
-            f"- After 5 correct turns, give a short confirming summary of the concept\n"
+            f"- NEVER play dumb or pretend you don't know what {topic} is — the student chose this topic\n"
+            f"- Ask ONE focused question at a time that probes understanding of HOW or WHY {topic} works\n"
+            f"- Questions should reveal deeper concepts (science, mechanisms, cause-and-effect), not trivial facts\n"
+            f"- Good question example for 'ice cream': 'Why do you think cream stays smooth when frozen, instead of turning into solid chunks like frozen water?'\n"
+            f"- If the student's answer is right, affirm briefly and go one level deeper\n"
+            f"- If the student is wrong or stuck, give ONE concrete hint that nudges toward the concept\n"
+            f"- After the student has grasped the key concepts (around 5-6 good exchanges), give a concise summary of what they discovered\n"
+            f"- Keep responses SHORT: 1-3 sentences max\n"
             f"{confusion_note}"
         )
     else:
@@ -525,16 +552,15 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
             f"{confusion_note}"
         )
 
-    messages = conversation + [{"role": "user", "content": body.question}]
+    messages = [{"role": "system", "content": system}] + conversation + [{"role": "user", "content": body.question}]
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    response = await client.messages.create(
-        model="claude-sonnet-4-5",
+    client = AsyncGroq(api_key=api_key)
+    response = await client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
         max_tokens=512,
-        system=system,
         messages=messages,
     )
-    reply = response.content[0].text.strip()
+    reply = response.choices[0].message.content.strip()
 
     conversation.append({"role": "user", "content": body.question})
     conversation.append({"role": "assistant", "content": reply})
@@ -562,27 +588,29 @@ async def start_socratic(body: SocraticRequest, user_id: str = Depends(get_curre
     Begin a Socratic learning session. Returns an opening question and a session history_id
     that can be used with POST /explain/followup to continue the Socratic dialogue.
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY not configured")
 
     prompt = (
-        f'You are starting a Socratic learning session on the topic: "{body.topic}".\n'
-        f"The student is at difficulty level {body.difficulty}/5.\n\n"
-        f"Generate ONE opening Socratic question that:\n"
-        f"- Probes what the student already knows\n"
-        f"- Is open-ended and thought-provoking\n"
-        f"- Does NOT give away any part of the answer\n\n"
-        f"Return ONLY the question — no preamble, no explanation."
+        f'Generate ONE opening Socratic question for a student who wants to learn about "{body.topic}".\n'
+        f"Difficulty level: {body.difficulty}/5.\n\n"
+        f"The student ALREADY KNOWS the topic is \"{body.topic}\" — do NOT play dumb about what it is.\n"
+        f"Instead, ask a question that makes them think about the underlying MECHANISM, SCIENCE, or PRINCIPLE.\n\n"
+        f"Good examples:\n"
+        f'- For "ice cream": "Why do you think cream stays smooth and creamy when frozen, rather than turning into solid chunks like water does?"\n'
+        f'- For "photosynthesis": "What do you think a plant actually needs in order to make its own food?"\n'
+        f'- For "gravity": "If you drop a feather and a bowling ball at the same time in a vacuum, what do you predict happens?"\n\n'
+        f"Return ONLY the question — no preamble, no explanation, no quotation marks."
     )
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    message = await client.messages.create(
-        model="claude-sonnet-4-5",
+    client = AsyncGroq(api_key=api_key)
+    message = await client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
         max_tokens=200,
         messages=[{"role": "user", "content": prompt}],
     )
-    opening_question = message.content[0].text.strip()
+    opening_question = message.choices[0].message.content.strip()
 
     db = get_db()
     history_id = await _save_history(
@@ -590,7 +618,6 @@ async def start_socratic(body: SocraticRequest, user_id: str = Depends(get_curre
         prompt, "",
     )
 
-    # Seed the chat context with the opening question as assistant turn
     chat_key = f"chat:{history_id}"
     seed = [{"role": "assistant", "content": opening_question}]
     r = await _get_redis()

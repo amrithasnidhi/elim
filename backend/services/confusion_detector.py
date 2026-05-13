@@ -19,15 +19,15 @@ JSON:"""
 async def detect_confusion(api_key: str, topic: str, question: str) -> dict:
     """Returns {{confusion_score, type}}. Never raises."""
     try:
-        import anthropic
-        client = anthropic.AsyncAnthropic(api_key=api_key)
+        from groq import AsyncGroq
+        client = AsyncGroq(api_key=api_key)
         prompt = _CONFUSION_PROMPT.format(topic=topic, question=question)
-        message = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
+        message = await client.chat.completions.create(
+            model="llama-3.1-8b-instant",
             max_tokens=60,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = message.content[0].text.strip()
+        raw = message.choices[0].message.content.strip()
         return json.loads(raw)
     except Exception:
         return {"confusion_score": 0.3, "type": "curious"}

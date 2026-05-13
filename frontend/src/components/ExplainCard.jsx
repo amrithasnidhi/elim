@@ -186,7 +186,7 @@ export default function ExplainCard({ explanation, followup, style, topic, histo
             ))}
           </div>
           <div style={{ paddingTop: '0.75rem' }}>
-            {activePanel === 'audio'   && <AudioPlayer historyId={historyId} />}
+            {activePanel === 'audio'   && <AudioPlayer text={explanation} />}
             {activePanel === 'diagram' && <DiagramView historyId={historyId} />}
             {activePanel === 'chat'    && <ChatThread  historyId={historyId} topic={topic} />}
           </div>
