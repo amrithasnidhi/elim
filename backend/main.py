@@ -1,14 +1,25 @@
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env BEFORE importing other modules
+# Check both project root and backend folder
+_this_dir = Path(__file__).resolve().parent
+_root_env = _this_dir.parent / ".env"
+_backend_env = _this_dir / ".env"
+
+if _root_env.exists():
+    load_dotenv(_root_env)
+if _backend_env.exists():
+    load_dotenv(_backend_env)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
-from dotenv import load_dotenv
 
 from database import connect_db, close_db, get_db
 from routers import explain, auth, profile, feedback, mcp, voice, images
-
-load_dotenv()
 
 # Sentry — no-op if SENTRY_DSN is not set
 _sentry_dsn = os.getenv("SENTRY_DSN_BACKEND", "")
@@ -37,11 +48,58 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
+API_DESCRIPTION = """
+## ELIM — Explain Like I'm Me
+
+An adaptive AI learning system that generates personalized explanations based on your learning style and knowledge level.
+
+### Features
+
+- **Adaptive Explanations**: Get explanations in your preferred style (analogy, step-by-step, code-based)
+- **Multi-Style Comparison**: Compare explanations across different styles simultaneously
+- **Socratic Learning**: Engage in guided discovery through questions
+- **Knowledge Sources**: Connect Google Drive, Notion, and GitHub for personalized context
+- **Spaced Repetition**: SM-2 algorithm for optimal review scheduling
+- **Voice Input/Output**: Transcribe audio and generate TTS for explanations
+- **Diagrams**: Auto-generate Mermaid.js diagrams for visual learners
+
+### Authentication
+
+All endpoints except `/auth/*` and `/health` require a Bearer token:
+```
+Authorization: Bearer <access_token>
+```
+
+### LLM Providers
+
+- **Primary**: Anthropic Claude (if `ANTHROPIC_API_KEY` is set)
+- **Fallback**: Groq LLaMA (if `GROQ_API_KEY` is set)
+"""
+
+TAGS_METADATA = [
+    {"name": "auth", "description": "User registration, login, and token management"},
+    {"name": "explain", "description": "Generate AI explanations, diagrams, audio, and follow-up chat"},
+    {"name": "profile", "description": "User profile, learning history, and preferences"},
+    {"name": "feedback", "description": "Rate explanations and view learning analytics"},
+    {"name": "mcp", "description": "Connect external knowledge sources (Google Drive, Notion, GitHub)"},
+    {"name": "voice", "description": "Voice transcription using Gemini"},
+]
+
 app = FastAPI(
-    title="ELIM — Explain Like I'm Me",
-    description="Adaptive AI learning system with personalised explanations",
+    title="ELIM API",
+    description=API_DESCRIPTION,
     version="3.0.0",
     lifespan=lifespan,
+    openapi_tags=TAGS_METADATA,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    contact={
+        "name": "ELIM Support",
+        "url": "https://github.com/your-repo/elim",
+    },
+    license_info={
+        "name": "MIT",
+    },
 )
 
 app.add_middleware(
@@ -65,8 +123,21 @@ os.makedirs(os.path.join(_static_dir, "audio"), exist_ok=True)
 app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    tags=["system"],
+    summary="Health check",
+    description="Check API and database connectivity status.",
+    response_description="Health status with database connection state",
+)
 async def health():
+    """
+    Returns the health status of the API.
+
+    - **status**: Always "ok" if the API is responding
+    - **db**: "connected" or "disconnected" based on MongoDB connectivity
+    - **version**: Current API version
+    """
     db = get_db()
     try:
         await db.command("ping")

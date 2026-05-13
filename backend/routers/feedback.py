@@ -7,7 +7,11 @@ from typing import Optional
 from database import get_db
 from dependencies import get_current_user_id
 
-router = APIRouter(prefix="/feedback", tags=["feedback"])
+router = APIRouter(
+    prefix="/feedback",
+    tags=["feedback"],
+    responses={401: {"description": "Not authenticated"}},
+)
 
 
 class RateRequest(BaseModel):
@@ -51,8 +55,26 @@ async def update_style_weights(db, user_id: str, style: str, score: int,
     return weights
 
 
-@router.post("/rate")
+@router.post(
+    "/rate",
+    summary="Rate an explanation",
+    description="Submit feedback on an explanation to improve future personalization.",
+)
 async def rate_explanation(body: RateRequest, user_id: str = Depends(get_current_user_id)):
+    """
+    Rate an explanation and update learning preferences.
+
+    **Effects:**
+    - Updates style weights based on feedback
+    - Records spaced repetition data (SM-2 algorithm)
+    - Adjusts pace/difficulty if needed
+    - Calculates time-to-rate for engagement metrics
+
+    **Score values:**
+    - `-1`: Not helpful
+    - `0`: Neutral
+    - `1`: Helpful
+    """
     db = get_db()
 
     try:

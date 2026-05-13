@@ -5,18 +5,17 @@ from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 
+# MCP URLs - Slack removed (not needed for Phase 1-8)
 MCP_URLS: dict[str, str] = {
     "gdrive": "https://drivemcp.googleapis.com/mcp/v1",
     "notion": "https://mcp.notion.com/mcp",
     "github": "https://api.githubcopilot.com/mcp/",
-    "slack": "https://mcp.slack.com/mcp",
 }
 
 TRUST_WEIGHTS: dict[str, float] = {
     "gdrive": 1.0,
     "notion": 1.0,
     "github": 0.85,
-    "slack": 0.85,
     "web": 0.60,
 }
 
@@ -24,7 +23,6 @@ SOURCE_LABELS: dict[str, str] = {
     "gdrive": "Google Drive",
     "notion": "Notion",
     "github": "GitHub",
-    "slack": "Slack",
     "web": "Web Search",
 }
 
@@ -54,6 +52,14 @@ def decrypt_token(encrypted: str) -> str:
 
 
 class MCPManager:
+    """
+    MCP (Model Context Protocol) Manager for querying external knowledge sources.
+
+    Note: MCP queries require ANTHROPIC_API_KEY. If not set, queries will return empty results
+    silently. This is expected behavior when using Groq fallback for LLM - MCP features
+    won't be available but the app will still function.
+    """
+
     def __init__(self, enabled_sources: list[str], encrypted_tokens: dict[str, str]):
         self.sources = [s for s in enabled_sources if s in (*MCP_URLS.keys(), "web")]
         f = _get_fernet()
@@ -78,12 +84,72 @@ class MCPManager:
         return self._deduplicate(flat)
 
     async def _query_source(self, source: str, topic: str) -> list[dict]:
-        # MCP source fetching requires Anthropic's beta MCP client API, unavailable with Groq
-        return []
+        if source == "web":
+            return await self._web_search(topic)
+        token = self.tokens.get(source)
+        if not token:
+            return []
+
+        # MCP requires Anthropic API key
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        if not anthropic_key:
+            return []  # MCP not available without Anthropic
+
+        try:
+            import anthropic
+            client = anthropic.AsyncAnthropic(api_key=anthropic_key)
+            resp = await client.beta.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=2000,
+                mcp_servers=[{
+                    "type": "url",
+                    "url": MCP_URLS[source],
+                    "name": source,
+                    "authorization_token": token,
+                }],
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        f"Search for and retrieve all content relevant to: {topic}. "
+                        "Return the raw text content found."
+                    ),
+                }],
+                betas=["mcp-client-2025-04-04"],
+            )
+            text = " ".join(b.text for b in resp.content if hasattr(b, "text")).strip()
+            if not text:
+                return []
+            return [{"text": text, "source": source, "trust": TRUST_WEIGHTS[source]}]
+        except Exception:
+            return []
 
     async def _web_search(self, topic: str) -> list[dict]:
-        # Built-in web search requires Anthropic's web_search tool, unavailable with Groq
-        return []
+        """Web search using Anthropic's built-in tool. Requires ANTHROPIC_API_KEY."""
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        if not anthropic_key:
+            return []  # Web search not available without Anthropic
+
+        try:
+            import anthropic
+            client = anthropic.AsyncAnthropic(api_key=anthropic_key)
+            resp = await client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1500,
+                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
+                messages=[{
+                    "role": "user",
+                    "content": (
+                        f"Search for educational content about: {topic}. "
+                        "Focus on reliable sources like Wikipedia, MDN, GeeksForGeeks, ArXiv."
+                    ),
+                }],
+            )
+            text = " ".join(b.text for b in resp.content if hasattr(b, "text")).strip()
+            if not text:
+                return []
+            return [{"text": text, "source": "web", "trust": 0.60}]
+        except Exception:
+            return []
 
     @staticmethod
     def _deduplicate(items: list[dict]) -> list[dict]:
