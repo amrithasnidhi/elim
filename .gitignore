@@ -31,3 +31,10 @@ Thumbs.db
 frontend-dev.log
 frontend-dev.err.log
 ~$*.docx
+
+# Data directories
+backend/chromadb_data/
+backend/static/audio/
+
+# Claude Code
+.claude/
