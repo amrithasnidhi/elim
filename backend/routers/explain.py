@@ -40,11 +40,29 @@ def _argmax_style(weights: dict) -> str:
 
 
 def _build_prompt(topic: str, style: str, difficulty: int, rag_context: str = "") -> str:
-    context_block = (
-        f"\nRelevant context from your knowledge sources — use this to personalise and ground the explanation:\n"
-        f"{rag_context}\n"
-        if rag_context else ""
-    )
+    is_live_web = rag_context and ("LIVE WEB DATA" in rag_context or "TODAY'S DATE:" in rag_context)
+
+    if is_live_web:
+        context_block = (
+            f"\n{'='*60}\n"
+            f"CRITICAL — LIVE WEB DATA (more current than your training):\n"
+            f"You MUST use the facts below. Do NOT contradict them with your training data.\n"
+            f"If the web data says someone died, they are dead. If it gives a date, use that date.\n"
+            f"{'='*60}\n"
+            f"{rag_context}\n"
+            f"{'='*60}\n"
+        )
+        cite_rule = "- State current facts (dates, outcomes, status) EXACTLY as given in the LIVE WEB DATA above — do NOT soften, hedge, or contradict them"
+    elif rag_context:
+        context_block = (
+            f"\nRelevant context from your knowledge sources — use this to personalise and ground the explanation:\n"
+            f"{rag_context}\n"
+        )
+        cite_rule = "- If context sources were provided above, cite them naturally (e.g. \"As your notes mention…\")"
+    else:
+        context_block = ""
+        cite_rule = "- Draw on your training knowledge to give an accurate, well-rounded explanation"
+
     return f"""You are an expert teacher with a gift for making complex topics clear.
 {context_block}
 Explain "{topic}" to a {DIFFICULTY_LABELS[difficulty]} (difficulty level {difficulty}/5).
@@ -54,7 +72,7 @@ Style instruction: {STYLE_INSTRUCTIONS[style]}
 Rules:
 - Avoid unnecessary jargon; explain any technical terms you must use
 - Keep the explanation focused and complete (aim for 200-400 words)
-- If context sources were provided above, cite them naturally (e.g. "As your notes mention…")
+{cite_rule}
 - End with EXACTLY one follow-up question on a new line starting with "Follow-up question: "
 
 Your explanation:"""
@@ -234,6 +252,12 @@ async def generate_explanation(
     if user:
         rag_context, mcp_sources, rag_chunks = await _load_mcp_context(user, body.topic)
 
+    from services.web_search import needs_web_search, search_web
+    if needs_web_search(body.topic):
+        web_ctx = await search_web(body.topic)
+        if web_ctx:
+            rag_context = web_ctx + ("\n\n" + rag_context if rag_context else "")
+
     result = await _call_llm(api_key, body.topic, effective_style, effective_difficulty, rag_context)
     if result["error"]:
         raise HTTPException(status_code=502, detail=f"LLM API error: {result['error']}")
@@ -288,6 +312,12 @@ async def multi_style_explanation(
     rag_context, mcp_sources, rag_chunks = "", [], []
     if user:
         rag_context, mcp_sources, rag_chunks = await _load_mcp_context(user, body.topic)
+
+    from services.web_search import needs_web_search, search_web
+    if needs_web_search(body.topic):
+        web_ctx = await search_web(body.topic)
+        if web_ctx:
+            rag_context = web_ctx + ("\n\n" + rag_context if rag_context else "")
 
     tasks = [_call_llm(api_key, body.topic, s, effective_difficulty, rag_context) for s in ALL_STYLES]
     results = await asyncio.gather(*tasks)
@@ -466,7 +496,7 @@ async def generate_diagram(body: DiagramRequest, user_id: str = Depends(get_curr
 
 _chat_fallback: dict[str, list] = {}
 CHAT_TTL = 7200
-MAX_TURNS = 5
+MAX_TURNS = 8
 
 
 async def _get_redis():
@@ -521,12 +551,25 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
         from services.confusion_detector import detect_confusion
         confusion = await detect_confusion(api_key, topic, body.question)
         if confusion.get("confusion_score", 0) > 0.7:
-            confusion_note = (
-                "\n\nIMPORTANT: The student appears confused. Re-explain the relevant part "
-                "from scratch using a simpler analogy. Do NOT just repeat the same explanation."
-            )
+            if is_socratic:
+                confusion_note = (
+                    "\n\nIMPORTANT: The student is stuck and doesn't know the answer. "
+                    "STOP asking questions. Instead: directly explain the specific concept in 2-3 clear sentences, "
+                    "then end with ONE simple yes/no or confirm question like 'Does that make sense?'"
+                )
+            else:
+                confusion_note = (
+                    "\n\nIMPORTANT: The student appears confused. Re-explain the relevant part "
+                    "from scratch using a simpler analogy. Do NOT just repeat the same explanation."
+                )
     except Exception:
         pass
+
+    # Enrich follow-up chat with live web data for current-event topics
+    followup_web_ctx = ""
+    from services.web_search import needs_web_search, search_web
+    if needs_web_search(topic):
+        followup_web_ctx = await search_web(topic + " " + body.question)
 
     if is_socratic:
         system = (
@@ -544,10 +587,23 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
             f"{confusion_note}"
         )
     else:
+        if followup_web_ctx:
+            web_section = (
+                f"\n\n{'='*60}\n"
+                f"CRITICAL — LIVE WEB DATA (more current than your training):\n"
+                f"State all dates, outcomes, and status EXACTLY as written below. Do NOT contradict them.\n"
+                f"{'='*60}\n"
+                f"{followup_web_ctx}\n"
+                f"{'='*60}\n"
+            )
+        else:
+            web_section = ""
         system = (
             f"You are a helpful tutor. The student just read this explanation of \"{topic}\":\n\n"
-            f"---\n{history['explanation'][:2000]}\n---\n\n"
+            f"---\n{history['explanation'][:2000]}\n---\n"
+            f"{web_section}\n"
             f"Answer their follow-up questions concisely (2–4 sentences). "
+            f"For any current fact (death dates, election results, recent events) use the LIVE WEB DATA above — it overrides your training. "
             f"If the question is unrelated, gently redirect them back to \"{topic}\"."
             f"{confusion_note}"
         )

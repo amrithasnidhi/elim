@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 from database import connect_db, close_db, get_db
-from routers import explain, auth, profile, feedback, mcp, voice
+from routers import explain, auth, profile, feedback, mcp, voice, images
 
 load_dotenv()
 
@@ -58,6 +58,7 @@ app.include_router(profile.router)
 app.include_router(feedback.router)
 app.include_router(mcp.router)
 app.include_router(voice.router)
+app.include_router(images.router)
 
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(os.path.join(_static_dir, "audio"), exist_ok=True)
