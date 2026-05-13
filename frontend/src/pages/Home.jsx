@@ -6,6 +6,7 @@ import api from '../lib/api'
 import ExplainCard from '../components/ExplainCard'
 import StyleTabs from '../components/StyleTabs'
 import SocraticChat from '../components/SocraticChat'
+import FeynmanTest from '../components/FeynmanTest'
 import LogoOrbit from '../components/LogoOrbit'
 import Background from '../components/Background'
 import useAuthStore from '../store/useAuthStore'
@@ -13,7 +14,15 @@ import useAuthStore from '../store/useAuthStore'
 const STYLES = [
   { value: 'analogy',      label: 'ANALOGY',       desc: 'Real-world comparisons', color: 'var(--purple)', border: 'rgba(124,110,240,0.4)', bg: 'rgba(124,110,240,0.06)' },
   { value: 'step-by-step', label: 'STEP-BY-STEP',  desc: 'Numbered walkthrough',   color: 'var(--cyan)',   border: 'rgba(0,229,255,0.4)',   bg: 'rgba(0,229,255,0.06)' },
-  { value: 'code-based',   label: 'CODE-FIRST',     desc: 'Working examples',       color: 'var(--green)',  border: 'rgba(0,255,157,0.4)',   bg: 'rgba(0,255,157,0.06)' },
+  { value: 'code-based',   label: 'CODE-FIRST',    desc: 'Working examples',       color: 'var(--green)',  border: 'rgba(0,255,157,0.4)',   bg: 'rgba(0,255,157,0.06)' },
+]
+
+const CODE_LANGUAGES = [
+  'Python', 'JavaScript', 'TypeScript', 'Java', 'C', 'C++', 'C#', 'Go',
+  'Rust', 'Swift', 'Kotlin', 'Ruby', 'PHP', 'Scala', 'R', 'MATLAB',
+  'Dart', 'Lua', 'Perl', 'Haskell', 'Elixir', 'Clojure', 'F#', 'Julia',
+  'Groovy', 'Erlang', 'Bash', 'PowerShell', 'SQL', 'HTML/CSS',
+  'Objective-C', 'Assembly', 'Nim', 'Zig', 'Crystal', 'Racket',
 ]
 
 const DIFFICULTY_LABELS = ['', 'BEGINNER', 'BASIC', 'INTERMEDIATE', 'ADVANCED', 'EXPERT']
@@ -28,7 +37,9 @@ export default function Home() {
   const [style, setStyle] = useState('analogy')
   const [difficulty, setDifficulty] = useState(2)
   const [mode, setMode] = useState(MODE_SINGLE)
+  const [codeLang, setCodeLang] = useState('Python')
   const [displayTime, setDisplayTime] = useState(null)
+  const [feynmanKey, setFeynmanKey] = useState(null)
   const [recording, setRecording] = useState(false)
   const mediaRecorderRef = useRef(null)
   const chunksRef = useRef([])
@@ -42,7 +53,10 @@ export default function Home() {
 
   const singleMutation = useMutation({
     mutationFn: (data) => api.post('/explain/generate', data).then((r) => r.data),
-    onSuccess: () => setDisplayTime(new Date().toISOString()),
+    onSuccess: (data) => {
+      setDisplayTime(new Date().toISOString())
+      if (data.history_id) setFeynmanKey(data.history_id)
+    },
     onError: (err) => toast.error(err.response?.data?.detail || 'GENERATION FAILED'),
   })
 
@@ -79,7 +93,7 @@ export default function Home() {
           })
           if (data.transcribed_text) setTopic(data.transcribed_text)
         } catch {
-          toast.error('TRANSCRIPTION_FAILED — check OPENAI_API_KEY')
+          toast.error('TRANSCRIPTION_FAILED')
         }
       }
       mr.start()
@@ -94,12 +108,12 @@ export default function Home() {
     e.preventDefault()
     if (!topic.trim()) { toast.error('ENTER A TOPIC'); return }
     if (mode === MODE_MULTI) {
-      multiMutation.mutate({ topic: topic.trim(), difficulty })
+      multiMutation.mutate({ topic: topic.trim(), difficulty, code_language: codeLang })
     } else if (mode === MODE_SOCRATIC) {
       if (!user) { toast.error('SIGN IN TO USE SOCRATIC MODE'); return }
       socraticMutation.mutate({ topic: topic.trim(), difficulty })
     } else {
-      singleMutation.mutate({ topic: topic.trim(), style, difficulty })
+      singleMutation.mutate({ topic: topic.trim(), style, difficulty, code_language: style === 'code-based' ? codeLang : undefined })
     }
   }
 
@@ -255,6 +269,44 @@ export default function Home() {
             </div>
           )}
 
+          {/* Language picker — shown when CODE-FIRST is active (single) or in COMPARE_ALL */}
+          {((mode === MODE_SINGLE && style === 'code-based') || mode === MODE_MULTI) && (
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label className="mono-label">
+                CODE_LANGUAGE
+                <span style={{ color: 'var(--green)', marginLeft: 8 }}>{codeLang}</span>
+              </label>
+              <div style={{
+                display: 'flex', flexWrap: 'wrap', gap: 5,
+                maxHeight: 130, overflowY: 'auto',
+                padding: '0.5rem',
+                background: 'rgba(0,255,157,0.02)',
+                border: '1px solid rgba(0,255,157,0.12)',
+                borderRadius: 2,
+              }}>
+                {CODE_LANGUAGES.map((lang) => (
+                  <button
+                    key={lang}
+                    type="button"
+                    onClick={() => setCodeLang(lang)}
+                    style={{
+                      padding: '3px 9px',
+                      fontFamily: "'Share Tech Mono',monospace",
+                      fontSize: 10, letterSpacing: '0.08em',
+                      border: codeLang === lang ? '1px solid rgba(0,255,157,0.6)' : '1px solid rgba(0,255,157,0.15)',
+                      background: codeLang === lang ? 'rgba(0,255,157,0.12)' : 'transparent',
+                      color: codeLang === lang ? 'var(--green)' : 'var(--dim)',
+                      borderRadius: 2, cursor: 'pointer', transition: 'all 0.15s',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {lang}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {mode === MODE_MULTI && (
             <div style={{
               marginBottom: '1.25rem', padding: '0.75rem 1rem',
@@ -346,6 +398,14 @@ export default function Home() {
               displayTimeUtc={displayTime}
               quality={singleMutation.data.quality}
             />
+            {user && feynmanKey === singleMutation.data.history_id && (
+              <FeynmanTest
+                key={feynmanKey}
+                historyId={feynmanKey}
+                topic={singleMutation.data.topic}
+                onComplete={() => setFeynmanKey(null)}
+              />
+            )}
           </div>
         )}
 

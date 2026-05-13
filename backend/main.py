@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from database import connect_db, close_db, get_db
-from routers import explain, auth, profile, feedback, mcp, voice, images
+from routers import explain, auth, profile, feedback, mcp, voice, images, feynman
 
 # Sentry — no-op if SENTRY_DSN is not set
 _sentry_dsn = os.getenv("SENTRY_DSN_BACKEND", "")
@@ -44,6 +44,9 @@ async def lifespan(app: FastAPI):
     await db.history.create_index("user_id")
     await db.spaced_rep.create_index([("user_id", 1), ("topic", 1)], unique=True)
     await db.spaced_rep.create_index("next_review")
+    await db.feynman_results.create_index([("user_id", 1), ("created_at", -1)])
+    await db.feynman_results.create_index([("user_id", 1), ("topic", 1)])
+    await db.feynman_results.create_index("history_id")
     yield
     await close_db()
 
@@ -117,6 +120,7 @@ app.include_router(feedback.router)
 app.include_router(mcp.router)
 app.include_router(voice.router)
 app.include_router(images.router)
+app.include_router(feynman.router)
 
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(os.path.join(_static_dir, "audio"), exist_ok=True)

@@ -26,8 +26,12 @@ router = APIRouter(
 STYLE_INSTRUCTIONS = {
     "analogy": "Use real-world analogies and comparisons to everyday objects or situations. Make abstract concepts tangible.",
     "step-by-step": "Walk through the concept step by step with numbered steps. Be methodical and build understanding progressively.",
-    "code-based": "Show working code examples (prefer Python unless specified). Explain through practical implementation.",
+    "code-based": "Show working code examples in {lang}. Explain through practical implementation. Use ONLY {lang} — do not show code in any other language.",
 }
+
+
+def _code_style_instruction(lang: str) -> str:
+    return STYLE_INSTRUCTIONS["code-based"].replace("{lang}", lang)
 
 DIFFICULTY_LABELS = {
     1: "complete beginner with no prior knowledge",
@@ -46,7 +50,7 @@ def _argmax_style(weights: dict) -> str:
     return max(weights, key=lambda k: weights[k])
 
 
-def _build_prompt(topic: str, style: str, difficulty: int, rag_context: str = "") -> str:
+def _build_prompt(topic: str, style: str, difficulty: int, rag_context: str = "", code_language: str = "Python") -> str:
     is_live_web = rag_context and ("LIVE WEB DATA" in rag_context or "TODAY'S DATE:" in rag_context)
 
     if is_live_web:
@@ -70,11 +74,17 @@ def _build_prompt(topic: str, style: str, difficulty: int, rag_context: str = ""
         context_block = ""
         cite_rule = "- Draw on your training knowledge to give an accurate, well-rounded explanation"
 
+    style_instruction = (
+        _code_style_instruction(code_language)
+        if style == "code-based"
+        else STYLE_INSTRUCTIONS[style]
+    )
+
     return f"""You are an expert teacher with a gift for making complex topics clear.
 {context_block}
 Explain "{topic}" to a {DIFFICULTY_LABELS[difficulty]} (difficulty level {difficulty}/5).
 
-Style instruction: {STYLE_INSTRUCTIONS[style]}
+Style instruction: {style_instruction}
 
 Rules:
 - Avoid unnecessary jargon; explain any technical terms you must use
@@ -92,9 +102,9 @@ def _parse_response(raw: str, topic: str) -> tuple[str, str]:
     return raw.strip(), f"Can you think of a real-world example where {topic} would be applied?"
 
 
-async def _call_llm(topic: str, style: str, difficulty: int, rag_context: str = "") -> dict:
+async def _call_llm(topic: str, style: str, difficulty: int, rag_context: str = "", code_language: str = "Python") -> dict:
     """Single async LLM call with fallback. Scores quality and retries once if avg < 3.0."""
-    prompt = _build_prompt(topic, style, difficulty, rag_context)
+    prompt = _build_prompt(topic, style, difficulty, rag_context, code_language)
 
     for attempt in range(MAX_QUALITY_RETRIES):
         try:
@@ -182,6 +192,11 @@ class ExplainRequest(BaseModel):
         ge=1,
         le=5,
         description="Difficulty level (1=beginner, 5=expert). If omitted, uses user's level.",
+    )
+    code_language: Optional[str] = Field(
+        default=None,
+        max_length=50,
+        description="Programming language for code-based style (e.g. 'Java', 'Rust'). Defaults to Python.",
     )
 
     model_config = {"json_schema_extra": {"examples": [{"topic": "recursion", "style": "analogy", "difficulty": 2}]}}
@@ -310,7 +325,8 @@ async def generate_explanation(
         if web_ctx:
             rag_context = web_ctx + ("\n\n" + rag_context if rag_context else "")
 
-    result = await _call_llm(body.topic, effective_style, effective_difficulty, rag_context)
+    lang = (body.code_language or "Python").strip() or "Python"
+    result = await _call_llm(body.topic, effective_style, effective_difficulty, rag_context, lang)
     if result["error"]:
         raise HTTPException(status_code=502, detail=f"LLM API error: {result['error']}")
 
@@ -379,7 +395,8 @@ async def multi_style_explanation(
         if web_ctx:
             rag_context = web_ctx + ("\n\n" + rag_context if rag_context else "")
 
-    tasks = [_call_llm(body.topic, s, effective_difficulty, rag_context) for s in ALL_STYLES]
+    lang = (body.code_language or "Python").strip() or "Python"
+    tasks = [_call_llm(body.topic, s, effective_difficulty, rag_context, lang) for s in ALL_STYLES]
     results = await asyncio.gather(*tasks)
 
     by_style = {r["style"]: r for r in results}
