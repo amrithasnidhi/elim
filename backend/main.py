@@ -1,14 +1,25 @@
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env BEFORE importing other modules
+# Check both project root and backend folder
+_this_dir = Path(__file__).resolve().parent
+_root_env = _this_dir.parent / ".env"
+_backend_env = _this_dir / ".env"
+
+if _root_env.exists():
+    load_dotenv(_root_env)
+if _backend_env.exists():
+    load_dotenv(_backend_env)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
-from dotenv import load_dotenv
 
 from database import connect_db, close_db, get_db
 from routers import explain, auth, profile, feedback, mcp, voice
-
-load_dotenv()
 
 # Sentry — no-op if SENTRY_DSN is not set
 _sentry_dsn = os.getenv("SENTRY_DSN_BACKEND", "")

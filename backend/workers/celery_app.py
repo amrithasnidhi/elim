@@ -1,6 +1,14 @@
 import os
+from pathlib import Path
 from celery import Celery
 from celery.schedules import crontab
+from dotenv import load_dotenv
+
+# Load .env - check project root first, then backend folder
+_root_env = Path(__file__).parent.parent.parent / ".env"
+_backend_env = Path(__file__).parent.parent / ".env"
+load_dotenv(_root_env)
+load_dotenv(_backend_env)
 
 celery_app = Celery(
     "elim",
