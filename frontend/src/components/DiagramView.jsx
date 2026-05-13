@@ -20,12 +20,19 @@ function MermaidRenderer({ code }) {
   }, [code, id])
 
   if (error) return (
-    <p style={{
-      fontFamily: "'Share Tech Mono',monospace",
-      fontSize: 10, color: '#ff4466', textAlign: 'center', padding: '1rem',
-    }}>
-      RENDER_ERROR
-    </p>
+    <div style={{ padding: '1rem' }}>
+      <p style={{
+        fontFamily: "'Share Tech Mono',monospace",
+        fontSize: 10, color: '#ff4466', textAlign: 'center', marginBottom: '0.5rem',
+      }}>
+        RENDER_ERROR
+      </p>
+      <pre style={{
+        fontFamily: "'Share Tech Mono',monospace",
+        fontSize: 9, color: 'var(--dim)', background: 'rgba(0,0,0,0.3)',
+        padding: '0.5rem', borderRadius: 2, overflowX: 'auto', whiteSpace: 'pre-wrap',
+      }}>{code}</pre>
+    </div>
   )
   if (!svg) return (
     <div style={{

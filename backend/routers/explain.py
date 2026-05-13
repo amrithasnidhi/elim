@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
@@ -46,11 +47,29 @@ def _argmax_style(weights: dict) -> str:
 
 
 def _build_prompt(topic: str, style: str, difficulty: int, rag_context: str = "") -> str:
-    context_block = (
-        f"\nRelevant context from your knowledge sources — use this to personalise and ground the explanation:\n"
-        f"{rag_context}\n"
-        if rag_context else ""
-    )
+    is_live_web = rag_context and ("LIVE WEB DATA" in rag_context or "TODAY'S DATE:" in rag_context)
+
+    if is_live_web:
+        context_block = (
+            f"\n{'='*60}\n"
+            f"CRITICAL — LIVE WEB DATA (more current than your training):\n"
+            f"You MUST use the facts below. Do NOT contradict them with your training data.\n"
+            f"If the web data says someone died, they are dead. If it gives a date, use that date.\n"
+            f"{'='*60}\n"
+            f"{rag_context}\n"
+            f"{'='*60}\n"
+        )
+        cite_rule = "- State current facts (dates, outcomes, status) EXACTLY as given in the LIVE WEB DATA above — do NOT soften, hedge, or contradict them"
+    elif rag_context:
+        context_block = (
+            f"\nRelevant context from your knowledge sources — use this to personalise and ground the explanation:\n"
+            f"{rag_context}\n"
+        )
+        cite_rule = "- If context sources were provided above, cite them naturally (e.g. \"As your notes mention…\")"
+    else:
+        context_block = ""
+        cite_rule = "- Draw on your training knowledge to give an accurate, well-rounded explanation"
+
     return f"""You are an expert teacher with a gift for making complex topics clear.
 {context_block}
 Explain "{topic}" to a {DIFFICULTY_LABELS[difficulty]} (difficulty level {difficulty}/5).
@@ -60,7 +79,7 @@ Style instruction: {STYLE_INSTRUCTIONS[style]}
 Rules:
 - Avoid unnecessary jargon; explain any technical terms you must use
 - Keep the explanation focused and complete (aim for 200-400 words)
-- If context sources were provided above, cite them naturally (e.g. "As your notes mention…")
+{cite_rule}
 - End with EXACTLY one follow-up question on a new line starting with "Follow-up question: "
 
 Your explanation:"""
@@ -100,7 +119,6 @@ async def _call_llm(topic: str, style: str, difficulty: int, rag_context: str = 
                     "provider": response.provider,
                     "error": None,
                 }
-            # Retry with a more explicit prompt nudge
             prompt += f"\n\n[Previous attempt scored {quality['avg']:.1f}/5 — please improve clarity and depth.]"
         except Exception as e:
             return {"style": style, "explanation": "", "followup": "", "prompt": prompt, "quality": None, "provider": None, "error": str(e)}
@@ -257,20 +275,9 @@ async def generate_explanation(
     **Features:**
     - Uses user's preferred style and difficulty if not specified
     - Pulls context from connected knowledge sources (Google Drive, Notion, GitHub)
+    - Fetches live web data for current events/people
     - Quality-checked with automatic retry if score < 3.0
     - Saves to history for authenticated users
-
-    **Styles:**
-    - `analogy`: Real-world comparisons and metaphors
-    - `step-by-step`: Numbered, methodical breakdown
-    - `code-based`: Working code examples (Python preferred)
-
-    **Difficulty Levels:**
-    - 1: Complete beginner
-    - 2: Beginner with basic awareness
-    - 3: Intermediate
-    - 4: Advanced
-    - 5: Expert
     """
     if not is_llm_available():
         raise HTTPException(status_code=500, detail="No LLM provider configured. Set ANTHROPIC_API_KEY or GROQ_API_KEY.")
@@ -295,6 +302,13 @@ async def generate_explanation(
     rag_context, mcp_sources, rag_chunks = "", [], []
     if user:
         rag_context, mcp_sources, rag_chunks = await _load_mcp_context(user, body.topic)
+
+    # Enrich with web search for current events
+    from services.web_search import needs_web_search, search_web
+    if needs_web_search(body.topic):
+        web_ctx = await search_web(body.topic)
+        if web_ctx:
+            rag_context = web_ctx + ("\n\n" + rag_context if rag_context else "")
 
     result = await _call_llm(body.topic, effective_style, effective_difficulty, rag_context)
     if result["error"]:
@@ -339,13 +353,6 @@ async def multi_style_explanation(
 ):
     """
     Generate explanations in all three styles for comparison.
-
-    Useful for:
-    - Finding which style resonates best with the user
-    - Comprehensive understanding from multiple angles
-    - Training the adaptive style weights through feedback
-
-    **Note:** The `style` field in the request is ignored; all styles are generated.
     """
     if not is_llm_available():
         raise HTTPException(status_code=500, detail="No LLM provider configured. Set ANTHROPIC_API_KEY or GROQ_API_KEY.")
@@ -364,6 +371,13 @@ async def multi_style_explanation(
     rag_context, mcp_sources, rag_chunks = "", [], []
     if user:
         rag_context, mcp_sources, rag_chunks = await _load_mcp_context(user, body.topic)
+
+    # Enrich with web search for current events
+    from services.web_search import needs_web_search, search_web
+    if needs_web_search(body.topic):
+        web_ctx = await search_web(body.topic)
+        if web_ctx:
+            rag_context = web_ctx + ("\n\n" + rag_context if rag_context else "")
 
     tasks = [_call_llm(body.topic, s, effective_difficulty, rag_context) for s in ALL_STYLES]
     results = await asyncio.gather(*tasks)
@@ -430,14 +444,7 @@ class AudioRequest(BaseModel):
     description="Convert an explanation to speech using ElevenLabs or Gemini TTS.",
 )
 async def request_audio(body: AudioRequest, user_id: str = Depends(get_current_user_id)):
-    """
-    Request text-to-speech generation for an explanation.
-
-    - Returns cached `audio_url` if already generated
-    - Otherwise starts async job and returns `job_id`
-    - Use `GET /explain/audio/{job_id}` to poll for completion
-    - Requires Redis and Celery worker running
-    """
+    """Request text-to-speech generation for an explanation."""
     db = get_db()
     history = await db.history.find_one({"_id": ObjectId(body.history_id)})
     if not history:
@@ -462,15 +469,7 @@ async def request_audio(body: AudioRequest, user_id: str = Depends(get_current_u
     description="Poll the status of an audio generation job.",
 )
 async def audio_status(job_id: str, user_id: str = Depends(get_current_user_id)):
-    """
-    Check status of TTS job.
-
-    **Status values:**
-    - `queued`: Job is waiting to start
-    - `generating`: Audio is being generated
-    - `done`: Audio ready, `audio_url` provided
-    - `failed`: Generation failed, `error` provided
-    """
+    """Check status of TTS job."""
     try:
         from workers.celery_app import celery_app
         result = celery_app.AsyncResult(job_id)
@@ -502,13 +501,7 @@ class DiagramRequest(BaseModel):
     description="Generate a Mermaid.js diagram visualizing the concept.",
 )
 async def generate_diagram(body: DiagramRequest, user_id: str = Depends(get_current_user_id)):
-    """
-    Generate a visual diagram for a topic using Mermaid.js syntax.
-
-    - Returns cached diagram if already generated
-    - Creates flowchart or graph suitable for the concept
-    - Returns raw Mermaid code (render on frontend)
-    """
+    """Generate a visual diagram for a topic using Mermaid.js syntax."""
     db = get_db()
     history = await db.history.find_one({"_id": ObjectId(body.history_id)})
     if not history:
@@ -523,13 +516,23 @@ async def generate_diagram(body: DiagramRequest, user_id: str = Depends(get_curr
         raise HTTPException(status_code=500, detail="No LLM provider configured")
 
     topic = history["topic"]
-    prompt = f"""Generate a Mermaid.js diagram that visually represents the concept: "{topic}".
-
-Rules:
-- Return ONLY raw Mermaid source — no markdown fences, no explanation text
-- Use flowchart TD or graph LR; pick whichever fits the concept better
-- Keep it concise: 5–10 nodes maximum
-- Labels must be short (2–5 words each)"""
+    prompt = (
+        f'Generate a Mermaid.js flowchart for the concept: "{topic}".\n\n'
+        f"Output ONLY the raw Mermaid syntax — no markdown fences, no explanatory text.\n"
+        f"Start your response with exactly: flowchart TD\n\n"
+        f"Rules:\n"
+        f"- Use flowchart TD layout\n"
+        f"- 5-8 nodes maximum\n"
+        f"- Short labels (2-4 plain words, ASCII only, NO parentheses or special chars)\n"
+        f"- Always use double-quoted labels: A[\"Start\"] --> B[\"Step 1\"]\n"
+        f"- Use --> for arrows, optionally with text: -->|\"label\"|\n"
+        f"- No subgraphs, no styling, no classDef, no HTML\n\n"
+        f"Example format:\n"
+        f"flowchart TD\n"
+        f'    A["Start"] --> B["Step One"]\n'
+        f'    B --> C["Step Two"]\n'
+        f'    C --> D["End"]'
+    )
 
     response = await call_llm(
         messages=[{"role": "user", "content": prompt}],
@@ -538,9 +541,47 @@ Rules:
     )
     raw = response.text.strip()
 
-    if raw.startswith("```"):
-        lines = raw.splitlines()
-        raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+    # Extract clean Mermaid code — handle fences and preamble text
+    fence_match = re.search(r'```(?:mermaid)?\s*\n([\s\S]+?)(?:\n```|$)', raw)
+    if fence_match:
+        raw = fence_match.group(1).strip()
+    elif raw.startswith('`'):
+        raw = re.sub(r'^`+\w*\s*', '', raw).rstrip('`').strip()
+
+    # Find the first Mermaid keyword line and discard any preamble
+    mermaid_start = re.search(
+        r'^(flowchart|graph |sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|mindmap)',
+        raw, re.MULTILINE,
+    )
+    if mermaid_start:
+        raw = raw[mermaid_start.start():]
+
+    # Fix common LLM syntax mistake: -->|label|> should be -->|label|
+    raw = re.sub(r'\|>', '|', raw)
+
+    # Sanitise for mermaid v11.15.0 — wrap bare labels in quotes, escape special chars
+    def _sanitise_mermaid(code: str) -> str:
+        lines = code.split('\n')
+        sanitised = []
+        for line in lines:
+            # Wrap unquoted bracket labels: A[Label Text] -> A["Label Text"]
+            line = re.sub(
+                r'\[([^"\]]+)\]',
+                lambda m: '["' + m.group(1).replace('"', '') + '"]',
+                line,
+            )
+            # Escape parentheses inside labels (common LLM mistake)
+            line = re.sub(
+                r'\["([^"]*?)"\]',
+                lambda m: '["' + m.group(1).replace('(', '#40;').replace(')', '#41;') + '"]',
+                line,
+            )
+            # Strip any stray HTML tags
+            line = re.sub(r'<[^>]+>', '', line)
+            sanitised.append(line)
+        return '\n'.join(sanitised)
+
+    raw = _sanitise_mermaid(raw)
     diagram_code = raw.strip()
 
     await db.history.update_one(
@@ -554,7 +595,7 @@ Rules:
 
 _chat_fallback: dict[str, list] = {}
 CHAT_TTL = 7200
-MAX_TURNS = 5
+MAX_TURNS = 8
 
 
 async def _get_redis():
@@ -608,34 +649,64 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
 
     topic = history["topic"]
 
-    # Detect confusion — if highly confused, instruct the AI to re-explain simply
+    # Detect confusion
     confusion_note = ""
     try:
         from services.confusion_detector import detect_confusion
         confusion = await detect_confusion(topic, body.question)
         if confusion.get("confusion_score", 0) > 0.7:
-            confusion_note = (
-                "\n\nIMPORTANT: The student appears confused. Re-explain the relevant part "
-                "from scratch using a simpler analogy. Do NOT just repeat the same explanation."
-            )
+            if is_socratic:
+                confusion_note = (
+                    "\n\nIMPORTANT: The student is stuck and doesn't know the answer. "
+                    "STOP asking questions. Instead: directly explain the specific concept in 2-3 clear sentences, "
+                    "then end with ONE simple yes/no or confirm question like 'Does that make sense?'"
+                )
+            else:
+                confusion_note = (
+                    "\n\nIMPORTANT: The student appears confused. Re-explain the relevant part "
+                    "from scratch using a simpler analogy. Do NOT just repeat the same explanation."
+                )
     except Exception:
         pass
 
+    # Enrich follow-up chat with live web data for current-event topics
+    followup_web_ctx = ""
+    from services.web_search import needs_web_search, search_web
+    if needs_web_search(topic):
+        followup_web_ctx = await search_web(topic + " " + body.question)
+
     if is_socratic:
         system = (
-            f'You are a Socratic tutor guiding the student to discover "{topic}" through questions.\n'
+            f'You are a Socratic tutor. The student has chosen to study "{topic}" — they already know the topic name.\n'
+            f"Your goal is to guide them to discover the CONCEPTS, MECHANISMS, and PRINCIPLES that explain {topic}.\n\n"
             f"Rules:\n"
-            f"- Ask ONE guiding question at a time — never give the answer directly\n"
-            f"- If the student is on the right track, praise briefly and ask a deeper question\n"
-            f"- If the student is wrong, give a gentle hint and ask again\n"
-            f"- After 5 correct turns, give a short confirming summary of the concept\n"
+            f"- NEVER play dumb or pretend you don't know what {topic} is — the student chose this topic\n"
+            f"- Ask ONE focused question at a time that probes understanding of HOW or WHY {topic} works\n"
+            f"- Questions should reveal deeper concepts (science, mechanisms, cause-and-effect), not trivial facts\n"
+            f"- If the student's answer is right, affirm briefly and go one level deeper\n"
+            f"- If the student is wrong or stuck, give ONE concrete hint that nudges toward the concept\n"
+            f"- After the student has grasped the key concepts (around 5-6 good exchanges), give a concise summary of what they discovered\n"
+            f"- Keep responses SHORT: 1-3 sentences max\n"
             f"{confusion_note}"
         )
     else:
+        if followup_web_ctx:
+            web_section = (
+                f"\n\n{'='*60}\n"
+                f"CRITICAL — LIVE WEB DATA (more current than your training):\n"
+                f"State all dates, outcomes, and status EXACTLY as written below. Do NOT contradict them.\n"
+                f"{'='*60}\n"
+                f"{followup_web_ctx}\n"
+                f"{'='*60}\n"
+            )
+        else:
+            web_section = ""
         system = (
             f"You are a helpful tutor. The student just read this explanation of \"{topic}\":\n\n"
-            f"---\n{history['explanation'][:2000]}\n---\n\n"
+            f"---\n{history['explanation'][:2000]}\n---\n"
+            f"{web_section}\n"
             f"Answer their follow-up questions concisely (2–4 sentences). "
+            f"For any current fact (death dates, election results, recent events) use the LIVE WEB DATA above — it overrides your training. "
             f"If the question is unrelated, gently redirect them back to \"{topic}\"."
             f"{confusion_note}"
         )
@@ -677,33 +748,16 @@ class SocraticRequest(BaseModel):
     description="Begin a guided discovery session where the AI asks questions instead of explaining directly.",
 )
 async def start_socratic(body: SocraticRequest, user_id: str = Depends(get_current_user_id)):
-    """
-    Start a Socratic learning session.
-
-    Instead of explaining directly, the AI asks thought-provoking questions
-    to guide the student to discover the concept themselves.
-
-    **How it works:**
-    1. Call this endpoint to get an opening question and `history_id`
-    2. Use `POST /explain/followup` with the `history_id` to continue the dialogue
-    3. The AI will guide with questions, hints, and confirmations
-
-    **Returns:**
-    - `opening_question`: First Socratic question to consider
-    - `history_id`: Use this for follow-up interactions
-    - `topic`: The topic being explored
-    """
+    """Start a Socratic learning session."""
     if not is_llm_available():
         raise HTTPException(status_code=500, detail="No LLM provider configured")
 
     prompt = (
-        f'You are starting a Socratic learning session on the topic: "{body.topic}".\n'
-        f"The student is at difficulty level {body.difficulty}/5.\n\n"
-        f"Generate ONE opening Socratic question that:\n"
-        f"- Probes what the student already knows\n"
-        f"- Is open-ended and thought-provoking\n"
-        f"- Does NOT give away any part of the answer\n\n"
-        f"Return ONLY the question — no preamble, no explanation."
+        f'Generate ONE opening Socratic question for a student who wants to learn about "{body.topic}".\n'
+        f"Difficulty level: {body.difficulty}/5.\n\n"
+        f"The student ALREADY KNOWS the topic is \"{body.topic}\" — do NOT play dumb about what it is.\n"
+        f"Instead, ask a question that makes them think about the underlying MECHANISM, SCIENCE, or PRINCIPLE.\n\n"
+        f"Return ONLY the question — no preamble, no explanation, no quotation marks."
     )
 
     response = await call_llm(

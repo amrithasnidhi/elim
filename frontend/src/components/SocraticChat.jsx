@@ -36,7 +36,7 @@ export default function SocraticChat({ openingQuestion, historyId, topic }) {
   }
 
   const turns = messages.filter((m) => m.role === 'user').length
-  const atLimit = turns >= 10
+  const atLimit = turns >= 15
 
   return (
     <div style={{
@@ -82,7 +82,7 @@ export default function SocraticChat({ openingQuestion, historyId, topic }) {
           fontSize: 9,
           color: atLimit ? '#ff4466' : 'rgba(245,166,35,0.5)',
         }}>
-          {turns}/10
+          {turns}/15
         </span>
       </div>
 
@@ -172,7 +172,7 @@ export default function SocraticChat({ openingQuestion, historyId, topic }) {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={atLimit ? 'Session limit reached (10 turns)' : 'Type your answer or question…'}
+          placeholder={atLimit ? 'Session limit reached (15 turns)' : 'Type your answer or question…'}
           disabled={mutation.isPending || atLimit}
           style={{
             flex: 1,

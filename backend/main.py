@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 from database import connect_db, close_db, get_db
-from routers import explain, auth, profile, feedback, mcp, voice
+from routers import explain, auth, profile, feedback, mcp, voice, images
 
 # Sentry — no-op if SENTRY_DSN is not set
 _sentry_dsn = os.getenv("SENTRY_DSN_BACKEND", "")
@@ -105,7 +105,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -116,6 +116,7 @@ app.include_router(profile.router)
 app.include_router(feedback.router)
 app.include_router(mcp.router)
 app.include_router(voice.router)
+app.include_router(images.router)
 
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(os.path.join(_static_dir, "audio"), exist_ok=True)

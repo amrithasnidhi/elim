@@ -3,7 +3,6 @@ import hashlib
 import os
 from typing import Optional
 
-import anthropic
 from cryptography.fernet import Fernet, InvalidToken
 
 # MCP URLs - Slack removed (not needed for Phase 1-8)
@@ -97,6 +96,7 @@ class MCPManager:
             return []  # MCP not available without Anthropic
 
         try:
+            import anthropic
             client = anthropic.AsyncAnthropic(api_key=anthropic_key)
             resp = await client.beta.messages.create(
                 model="claude-haiku-4-5-20251001",
@@ -130,6 +130,7 @@ class MCPManager:
             return []  # Web search not available without Anthropic
 
         try:
+            import anthropic
             client = anthropic.AsyncAnthropic(api_key=anthropic_key)
             resp = await client.messages.create(
                 model="claude-haiku-4-5-20251001",

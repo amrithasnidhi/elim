@@ -1,100 +1,67 @@
-import { useState, useRef, useEffect } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
-import api from '../lib/api'
+import { useState, useEffect, useRef } from 'react'
 
 const SPEEDS = [0.75, 1, 1.5, 2]
 
-export default function AudioPlayer({ historyId }) {
-  const [jobId, setJobId] = useState(null)
-  const [audioUrl, setAudioUrl] = useState(null)
-  const [playing, setPlaying] = useState(false)
+export default function AudioPlayer({ text }) {
+  const [speaking, setSpeaking] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [done, setDone] = useState(false)
   const [speed, setSpeed] = useState(1)
-  const [progress, setProgress] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const audioRef = useRef(null)
-
-  const requestMutation = useMutation({
-    mutationFn: () => api.post('/explain/audio', { history_id: historyId }).then((r) => r.data),
-    onSuccess: (data) => {
-      if (data.audio_url) setAudioUrl(data.audio_url)
-      else if (data.job_id) setJobId(data.job_id)
-    },
-    onError: (err) => toast.error(err.response?.data?.detail || 'Audio generation failed'),
-  })
-
-  useQuery({
-    queryKey: ['audio-status', jobId],
-    queryFn: () => api.get(`/explain/audio/${jobId}`).then((r) => r.data),
-    enabled: !!jobId,
-    refetchInterval: (data) => {
-      if (!data || data.status === 'done' || data.status === 'failed') return false
-      return 2000
-    },
-    onSuccess: (data) => {
-      if (data.status === 'done' && data.audio_url) {
-        setAudioUrl(data.audio_url)
-        setJobId(null)
-        toast.success('AUDIO READY')
-      }
-      if (data.status === 'failed') {
-        toast.error(data.error || 'Audio generation failed')
-        setJobId(null)
-      }
-    },
-  })
+  const speedRef = useRef(1)
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.playbackRate = speed
+    speedRef.current = speed
   }, [speed])
 
-  const togglePlay = () => {
-    if (!audioRef.current) return
-    playing ? audioRef.current.pause() : audioRef.current.play()
-    setPlaying(!playing)
+  useEffect(() => {
+    return () => window.speechSynthesis.cancel()
+  }, [])
+
+  const supported = 'speechSynthesis' in window
+
+  const speak = (rate) => {
+    window.speechSynthesis.cancel()
+    const utt = new SpeechSynthesisUtterance(text)
+    utt.rate = rate ?? speedRef.current
+    utt.onstart  = () => { setSpeaking(true); setPaused(false); setDone(false) }
+    utt.onend    = () => { setSpeaking(false); setPaused(false); setDone(true) }
+    utt.onerror  = () => { setSpeaking(false); setPaused(false) }
+    window.speechSynthesis.speak(utt)
   }
 
-  const handleTimeUpdate = () => {
-    if (!audioRef.current) return
-    setProgress((audioRef.current.currentTime / audioRef.current.duration) * 100 || 0)
+  const handlePlayPause = () => {
+    if (!supported) return
+    if (speaking) {
+      window.speechSynthesis.pause()
+      setSpeaking(false)
+      setPaused(true)
+    } else if (paused) {
+      window.speechSynthesis.resume()
+      setSpeaking(true)
+      setPaused(false)
+    } else {
+      speak()
+    }
   }
 
-  const handleScrub = (e) => {
-    if (!audioRef.current || !duration) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const pct = (e.clientX - rect.left) / rect.width
-    audioRef.current.currentTime = pct * duration
-    setProgress(pct * 100)
+  const handleStop = () => {
+    window.speechSynthesis.cancel()
+    setSpeaking(false)
+    setPaused(false)
+    setDone(false)
   }
 
-  const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
-
-  const isLoading = requestMutation.isPending || !!jobId
-
-  if (!audioUrl) {
-    return (
-      <button
-        type="button"
-        onClick={() => requestMutation.mutate()}
-        disabled={isLoading}
-        className="cyber-btn-ghost"
-        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-      >
-        {isLoading ? (
-          <svg style={{ animation: 'spinCW 1s linear infinite' }} width="12" height="12" fill="none" viewBox="0 0 24 24">
-            <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-            <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-          </svg>
-        ) : (
-          <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M15.536 8.464a5 5 0 010 7.072M12 6a7 7 0 010 12M8.464 8.464a5 5 0 000 7.072" />
-          </svg>
-        )}
-        {isLoading ? 'GENERATING…' : 'GENERATE_AUDIO'}
-      </button>
-    )
+  const handleSpeed = (s) => {
+    setSpeed(s)
+    speedRef.current = s
+    if (speaking || paused) speak(s)
   }
+
+  if (!supported) return (
+    <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 10, color: 'var(--dim)' }}>
+      TTS_NOT_SUPPORTED
+    </span>
+  )
 
   return (
     <div style={{
@@ -102,18 +69,12 @@ export default function AudioPlayer({ historyId }) {
       border: '1px solid rgba(0,229,255,0.15)',
       borderRadius: 2, padding: '0.625rem',
     }}>
-      <audio
-        ref={audioRef}
-        src={audioUrl}
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
-        onEnded={() => setPlaying(false)}
-      />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        {/* Play/pause */}
+
+        {/* Play / Pause */}
         <button
           type="button"
-          onClick={togglePlay}
+          onClick={handlePlayPause}
           style={{
             width: 28, height: 28, flexShrink: 0, borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -122,7 +83,7 @@ export default function AudioPlayer({ historyId }) {
             cursor: 'pointer', color: 'var(--cyan)',
           }}
         >
-          {playing ? (
+          {speaking ? (
             <svg width="10" height="10" fill="currentColor" viewBox="0 0 24 24">
               <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
             </svg>
@@ -133,30 +94,29 @@ export default function AudioPlayer({ historyId }) {
           )}
         </button>
 
-        {/* Progress bar */}
+        {/* Status */}
         <div style={{ flex: 1 }}>
-          <div
-            className="weight-bar-track"
-            style={{ cursor: 'pointer', borderRadius: 2 }}
-            onClick={handleScrub}
-          >
-            <div
-              className="weight-bar-fill"
-              style={{
-                width: `${progress}%`,
-                background: 'var(--cyan)',
-                boxShadow: '0 0 6px rgba(0,229,255,0.4)',
-              }}
-            />
-          </div>
-          <div style={{
-            display: 'flex', justifyContent: 'space-between',
-            fontFamily: "'Share Tech Mono',monospace",
-            fontSize: 8, color: 'var(--dim)', marginTop: 3,
-          }}>
-            <span>{fmt(audioRef.current?.currentTime || 0)}</span>
-            <span>{fmt(duration)}</span>
-          </div>
+          {speaking ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {[0.6, 1, 0.7, 1, 0.5].map((h, i) => (
+                <div key={i} style={{
+                  width: 3, borderRadius: 1,
+                  background: 'var(--cyan)',
+                  height: `${h * 12}px`,
+                  animation: `blink ${0.7 + i * 0.15}s ease-in-out infinite`,
+                }} />
+              ))}
+              <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: 'var(--cyan)', marginLeft: 4, letterSpacing: '0.1em' }}>
+                SPEAKING…
+              </span>
+            </div>
+          ) : paused ? (
+            <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: 'var(--amber)', letterSpacing: '0.1em' }}>PAUSED</span>
+          ) : done ? (
+            <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: 'var(--green)', letterSpacing: '0.1em' }}>DONE — PRESS PLAY TO REPLAY</span>
+          ) : (
+            <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: 'var(--dim)', letterSpacing: '0.1em' }}>PRESS PLAY TO LISTEN</span>
+          )}
         </div>
 
         {/* Speed */}
@@ -165,7 +125,7 @@ export default function AudioPlayer({ historyId }) {
             <button
               key={s}
               type="button"
-              onClick={() => setSpeed(s)}
+              onClick={() => handleSpeed(s)}
               style={{
                 fontFamily: "'Share Tech Mono',monospace",
                 fontSize: 8, padding: '2px 4px', borderRadius: 1,
@@ -180,19 +140,25 @@ export default function AudioPlayer({ historyId }) {
           ))}
         </div>
 
-        {/* Download */}
-        <a
-          href={audioUrl}
-          download="elim-audio.mp3"
-          style={{ color: 'var(--dim)', transition: 'color 0.2s' }}
-          onMouseEnter={e => e.currentTarget.style.color = 'var(--cyan)'}
-          onMouseLeave={e => e.currentTarget.style.color = 'var(--dim)'}
-          title="Download"
-        >
-          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-          </svg>
-        </a>
+        {/* Stop */}
+        {(speaking || paused) && (
+          <button
+            type="button"
+            onClick={handleStop}
+            title="Stop"
+            style={{
+              width: 20, height: 20, flexShrink: 0, borderRadius: 2,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent',
+              border: '1px solid rgba(255,68,102,0.3)',
+              cursor: 'pointer', color: '#ff4466',
+            }}
+          >
+            <svg width="8" height="8" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 6h12v12H6z"/>
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   )
