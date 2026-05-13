@@ -51,7 +51,6 @@ Rate an explanation 👍 or 👎, and the system updates your preference weights
 - 📁 **Google Drive** — indexes your lecture notes, PDFs, and slides
 - 📝 **Notion** — pulls your personal study notes and knowledge bases
 - 🐙 **GitHub** — retrieves code examples from your repos and READMEs
-- 💬 **Slack** — surfaces study group discussions and Q&A threads
 - 🌐 **Web Search** — fallback to trusted educational sources (Wikipedia, MDN, ArXiv)
 
 ### Multi-Modal Output
@@ -88,16 +87,16 @@ Rate an explanation 👍 or 👎, and the system updates your preference weights
 │  │ MCPManager  │  │ RAG Pipeline │  │ Prompt Builder│  │
 │  │             │  │              │  │               │  │
 │  │ Google Drive│  │ Chunk (500t) │  │ LangChain     │  │
-│  │ Notion      │  │ Embed (1536d)│  │ PromptTemplate│  │
+│  │ Notion      │  │ Embed (768d)│  │ PromptTemplate│  │
 │  │ GitHub      │  │ ChromaDB     │  │ Style inject  │  │
-│  │ Slack       │  │ Top-k search │  │ RAG context   │  │
+│  │ Image Search│  │ Top-k search │  │ RAG context   │  │
 │  │ Web Search  │  │ Trust weight │  │               │  │
 │  └──────┬──────┘  └──────┬───────┘  └───────┬───────┘  │
 │         └────────────────┴──────────────────┘          │
 │                          │                              │
 │  ┌───────────────────────▼─────────────────────────┐   │
 │  │              LLM Service (Claude)                │   │
-│  │     claude-sonnet-4-20250514 · LangSmith traced  │   │
+│  │     Claude/Groq · LangSmith traced  │   │
 │  └──────────────────────────────────────────────────┘   │
 │                                                         │
 │  ┌──────────────┐  ┌────────────┐  ┌───────────────┐   │
@@ -124,13 +123,13 @@ Rate an explanation 👍 or 👎, and the system updates your preference weights
 |---|---|
 | **Frontend** | React 18, Vite, Tailwind CSS, Zustand, React Query, Framer Motion |
 | **Backend** | Python 3.11, FastAPI, Pydantic v2, Motor (async MongoDB) |
-| **AI / LLM** | Anthropic Claude API, LangChain, LangSmith |
-| **Embeddings** | OpenAI text-embedding-3-small (1536d) |
+| **AI / LLM** | Anthropic Claude API (Primary), Groq API (Fallback), LangChain, LangSmith |
+| **Embeddings** | OpenAI Gemini Embeddings (768d) |
 | **Vector Store** | ChromaDB (dev) / Pinecone (prod) |
-| **MCP** | Anthropic MCP SDK — Google Drive, Notion, GitHub, Slack |
-| **Voice** | OpenAI Whisper (STT), ElevenLabs / OpenAI TTS |
-| **Database** | MongoDB Atlas |
-| **Cache / Queue** | Redis (Upstash), Celery |
+| **MCP** | Anthropic MCP SDK — Google Drive, Notion, GitHub |
+| **Voice** | ElevenLabs (Primary TTS), Gemini (Fallback STT/TTS) |
+| **Database** | MongoDB (Docker / Atlas) |
+| **Cache / Queue** | Redis (Docker / Upstash), Celery |
 | **Storage** | AWS S3 / Cloudflare R2 (audio files) |
 | **Deployment** | Vercel (frontend), Railway (backend + workers) |
 | **Monitoring** | Sentry, LangSmith |
@@ -142,16 +141,15 @@ Rate an explanation 👍 or 👎, and the system updates your preference weights
 ### Prerequisites
 
 - Node.js 18+
-- Python 3.11+
+- Python 3.10+
 - Docker & Docker Compose
-- Anthropic API key
-- OpenAI API key
-- MongoDB Atlas account (free tier works)
+- Git
+- API Keys: Anthropic (or Groq for free fallback), Gemini (free), etc.
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/elim.git
+git clone https://github.com/amrithasnidhi/elim.git
 cd elim
 ```
 
@@ -161,67 +159,58 @@ cd elim
 cp .env.example .env
 ```
 
-Open `.env` and fill in your keys:
+Open `.env` and fill in your keys. At minimum you need:
+- `GROQ_API_KEY` (free at https://console.groq.com)
+- `GEMINI_API_KEY` (free at https://aistudio.google.com)
 
-```env
-# LLM
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-...
+> See `.env.example` for generating local secrets (JWT, Fernet).
 
-# Database
-MONGODB_URI=mongodb+srv://...
-REDIS_URL=redis://...
+### 3. Start Docker Services (MongoDB & Redis)
 
-# Auth
-JWT_SECRET=your-256-bit-secret
-JWT_REFRESH_SECRET=your-other-256-bit-secret
-ENCRYPTION_KEY=your-fernet-key
-
-# Storage (for audio files)
-S3_BUCKET_NAME=elim-audio
-S3_ACCESS_KEY=...
-S3_SECRET_KEY=...
-
-# Monitoring (optional)
-LANGCHAIN_API_KEY=ls__...
-LANGCHAIN_TRACING_V2=true
-SENTRY_DSN_BACKEND=https://...
-SENTRY_DSN_FRONTEND=https://...
-
-# Frontend
-VITE_API_URL=http://localhost:8000
-```
-
-> Generate secrets: `openssl rand -hex 32` (JWT) · `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` (Fernet)
-
-### 3. Start with Docker Compose
+Make sure Docker Desktop is running, then run:
 
 ```bash
-docker compose up --build
+docker compose up -d mongodb redis
 ```
 
-This starts:
-- **FastAPI backend** at `http://localhost:8000`
-- **MongoDB** at `localhost:27017`
-- **Redis** at `localhost:6379`
-- **Celery worker** for background tasks
+### 4. Backend Setup (Terminal 1)
 
-### 4. Start the frontend
+Open a NEW terminal and run:
+```bash
+cd backend
+python -m venv .venv
+# Activate:
+# Windows: .venv\Scripts\Activate.ps1
+# Mac/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+Keep this terminal running.
 
+### 5. Frontend Setup (Terminal 2)
+
+Open a NEW terminal and run:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-
 Frontend runs at **`http://localhost:5173`**
 
-### 5. Verify everything is running
+### 6. Celery Worker (Terminal 3)
 
+Open a NEW terminal and run:
 ```bash
-curl http://localhost:8000/health
-# {"status":"ok","db":"connected","redis":"connected"}
+cd backend
+# Activate venv first
+celery -A workers.celery_app worker --loglevel=info --pool=solo
 ```
+
+### 7. Verify Setup
+
+Frontend: `http://localhost:5173`
+Backend API: `http://localhost:8000`
+API Docs: `http://localhost:8000/docs`
 
 ---
 
@@ -285,7 +274,6 @@ Connect your own study material so explanations cite **your actual notes** — n
 | 📁 Google Drive | Lecture PDFs, slides, textbooks | 1.0 (highest) |
 | 📝 Notion | Personal notes, study databases | 1.0 |
 | 🐙 GitHub | Code files, READMEs, wikis | 0.85 |
-| 💬 Slack | Study group threads, Q&As | 0.85 |
 | 🌐 Web Search | Wikipedia, MDN, ArXiv (fallback) | 0.60 |
 
 Connect a source in **Settings → Knowledge Sources**. Once connected, ELIM indexes your content and cites it inline:
@@ -361,7 +349,7 @@ Base URL: `http://localhost:8000` · Full docs: `http://localhost:8000/docs`
     "step-by-step": Float,
     code: Float
   },
-  enabled_mcp_sources: [String],       // ["gdrive", "notion", "github"]
+  enabled_mcp_sources: [String],       // ["gdrive", "notion", "github", "web"]
   mcp_tokens: { source: encryptedStr },// Fernet-encrypted OAuth tokens
   topic_history: [String],             // last 50 topics → seeds RAG queries
   spaced_rep_queue: [{                 // SM-2 spaced repetition schedule
@@ -459,7 +447,7 @@ Set `VITE_API_URL` to your Railway backend URL in Vercel environment variables.
 
 ### Vector Store → Pinecone (production)
 
-1. Create a Pinecone index: **1536 dimensions**, **cosine** metric
+1. Create a Pinecone index: **768 dimensions (Gemini)**, **cosine** metric
 2. Add `PINECONE_API_KEY` and `PINECONE_INDEX_NAME` to your `.env`
 3. Set `VECTOR_STORE=pinecone` in environment variables
 
@@ -471,7 +459,7 @@ Set `VITE_API_URL` to your Railway backend URL in Vercel environment variables.
 - [x] Phase 2 — User auth + profile system
 - [x] Phase 3 — Feedback loop + style_weights adaptation
 - [x] Phase 4 — Multi-style parallel output + Compare page
-- [x] Phase 5 — MCP knowledge integration (Google Drive, Notion, GitHub, Slack, Web)
+- [x] Phase 5 — MCP knowledge integration (Google Drive, Notion, GitHub, Web, Images)
 - [x] Phase 6 — Full RAG pipeline (ChromaDB, embeddings, Celery indexing)
 - [x] Phase 7 — Multi-modal output (TTS, Mermaid diagrams, voice input, follow-up chat)
 - [x] Phase 8 — Advanced features (Pace Detector, Quality Scorer, Confusion Detector, Socratic Mode, Spaced Repetition SM-2, Concept Dependency Graph, Explanation Diff, Topic Recommendations, Peer Matching, Sentry)
