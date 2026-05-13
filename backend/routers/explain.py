@@ -4,7 +4,6 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 from bson import ObjectId
 from typing import Optional
-import anthropic
 import asyncio
 import os
 
@@ -12,6 +11,7 @@ from database import get_db
 from dependencies import get_optional_user_id, get_current_user_id
 from services.mcp_manager import MCPManager
 from services.rag_pipeline import get_rag_pipeline
+from services.llm_service import call_llm, is_llm_available, LLMResponse
 
 router = APIRouter(prefix="/explain", tags=["explain"])
 
@@ -66,23 +66,22 @@ def _parse_response(raw: str, topic: str) -> tuple[str, str]:
     return raw.strip(), f"Can you think of a real-world example where {topic} would be applied?"
 
 
-async def _call_llm(api_key: str, topic: str, style: str, difficulty: int, rag_context: str = "") -> dict:
-    """Single async LLM call. Scores quality with Haiku and retries once if avg < 3.0."""
+async def _call_llm(topic: str, style: str, difficulty: int, rag_context: str = "") -> dict:
+    """Single async LLM call with fallback. Scores quality and retries once if avg < 3.0."""
     prompt = _build_prompt(topic, style, difficulty, rag_context)
 
     for attempt in range(MAX_QUALITY_RETRIES):
         try:
-            client = anthropic.AsyncAnthropic(api_key=api_key)
-            message = await client.messages.create(
+            response: LLMResponse = await call_llm(
+                messages=[{"role": "user", "content": prompt}],
                 model="claude-sonnet-4-5",
                 max_tokens=1024,
-                messages=[{"role": "user", "content": prompt}],
             )
-            explanation, followup = _parse_response(message.content[0].text, topic)
+            explanation, followup = _parse_response(response.text, topic)
 
-            # Quality gate — Haiku scores clarity/accuracy/style_fit
+            # Quality gate — uses fast model to score clarity/accuracy/style_fit
             from services.quality_scorer import score_explanation
-            quality = await score_explanation(api_key, topic, style, explanation)
+            quality = await score_explanation(topic, style, explanation)
 
             if quality["avg"] >= QUALITY_THRESHOLD or attempt == MAX_QUALITY_RETRIES - 1:
                 return {
@@ -91,14 +90,15 @@ async def _call_llm(api_key: str, topic: str, style: str, difficulty: int, rag_c
                     "followup": followup,
                     "prompt": prompt,
                     "quality": quality,
+                    "provider": response.provider,
                     "error": None,
                 }
             # Retry with a more explicit prompt nudge
             prompt += f"\n\n[Previous attempt scored {quality['avg']:.1f}/5 — please improve clarity and depth.]"
         except Exception as e:
-            return {"style": style, "explanation": "", "followup": "", "prompt": prompt, "quality": None, "error": str(e)}
+            return {"style": style, "explanation": "", "followup": "", "prompt": prompt, "quality": None, "provider": None, "error": str(e)}
 
-    return {"style": style, "explanation": "", "followup": "", "prompt": prompt, "quality": None, "error": "Max retries exceeded"}
+    return {"style": style, "explanation": "", "followup": "", "prompt": prompt, "quality": None, "provider": None, "error": "Max retries exceeded"}
 
 
 async def _save_history(
@@ -210,9 +210,8 @@ async def generate_explanation(
     body: ExplainRequest,
     user_id: Optional[str] = Depends(get_optional_user_id),
 ):
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+    if not is_llm_available():
+        raise HTTPException(status_code=500, detail="No LLM provider configured. Set ANTHROPIC_API_KEY or GROQ_API_KEY.")
 
     db = get_db()
     effective_style = body.style
@@ -235,7 +234,7 @@ async def generate_explanation(
     if user:
         rag_context, mcp_sources, rag_chunks = await _load_mcp_context(user, body.topic)
 
-    result = await _call_llm(api_key, body.topic, effective_style, effective_difficulty, rag_context)
+    result = await _call_llm(body.topic, effective_style, effective_difficulty, rag_context)
     if result["error"]:
         raise HTTPException(status_code=502, detail=f"LLM API error: {result['error']}")
 
@@ -271,9 +270,8 @@ async def multi_style_explanation(
     body: ExplainRequest,
     user_id: Optional[str] = Depends(get_optional_user_id),
 ):
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+    if not is_llm_available():
+        raise HTTPException(status_code=500, detail="No LLM provider configured. Set ANTHROPIC_API_KEY or GROQ_API_KEY.")
 
     db = get_db()
     effective_difficulty = body.difficulty
@@ -290,7 +288,7 @@ async def multi_style_explanation(
     if user:
         rag_context, mcp_sources, rag_chunks = await _load_mcp_context(user, body.topic)
 
-    tasks = [_call_llm(api_key, body.topic, s, effective_difficulty, rag_context) for s in ALL_STYLES]
+    tasks = [_call_llm(body.topic, s, effective_difficulty, rag_context) for s in ALL_STYLES]
     results = await asyncio.gather(*tasks)
 
     by_style = {r["style"]: r for r in results}
@@ -406,9 +404,8 @@ async def generate_diagram(body: DiagramRequest, user_id: str = Depends(get_curr
     if history.get("diagram_code"):
         return {"diagram_code": history["diagram_code"]}
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+    if not is_llm_available():
+        raise HTTPException(status_code=500, detail="No LLM provider configured")
 
     topic = history["topic"]
     prompt = f"""Generate a Mermaid.js diagram that visually represents the concept: "{topic}".
@@ -419,13 +416,12 @@ Rules:
 - Keep it concise: 5–10 nodes maximum
 - Labels must be short (2–5 words each)"""
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    message = await client.messages.create(
+    response = await call_llm(
+        messages=[{"role": "user", "content": prompt}],
         model="claude-sonnet-4-5",
         max_tokens=512,
-        messages=[{"role": "user", "content": prompt}],
     )
-    raw = message.content[0].text.strip()
+    raw = response.text.strip()
 
     if raw.startswith("```"):
         lines = raw.splitlines()
@@ -469,9 +465,8 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
     if str(history["user_id"]) != user_id:
         raise HTTPException(status_code=403, detail="Not your history")
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+    if not is_llm_available():
+        raise HTTPException(status_code=500, detail="No LLM provider configured")
 
     chat_key = f"chat:{body.history_id}"
     is_socratic = history.get("style_used") == "socratic"
@@ -497,7 +492,7 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
     confusion_note = ""
     try:
         from services.confusion_detector import detect_confusion
-        confusion = await detect_confusion(api_key, topic, body.question)
+        confusion = await detect_confusion(topic, body.question)
         if confusion.get("confusion_score", 0) > 0.7:
             confusion_note = (
                 "\n\nIMPORTANT: The student appears confused. Re-explain the relevant part "
@@ -527,14 +522,13 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
 
     messages = conversation + [{"role": "user", "content": body.question}]
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    response = await client.messages.create(
+    response = await call_llm(
+        messages=messages,
         model="claude-sonnet-4-5",
         max_tokens=512,
         system=system,
-        messages=messages,
     )
-    reply = response.content[0].text.strip()
+    reply = response.text.strip()
 
     conversation.append({"role": "user", "content": body.question})
     conversation.append({"role": "assistant", "content": reply})
@@ -562,9 +556,8 @@ async def start_socratic(body: SocraticRequest, user_id: str = Depends(get_curre
     Begin a Socratic learning session. Returns an opening question and a session history_id
     that can be used with POST /explain/followup to continue the Socratic dialogue.
     """
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+    if not is_llm_available():
+        raise HTTPException(status_code=500, detail="No LLM provider configured")
 
     prompt = (
         f'You are starting a Socratic learning session on the topic: "{body.topic}".\n'
@@ -576,13 +569,12 @@ async def start_socratic(body: SocraticRequest, user_id: str = Depends(get_curre
         f"Return ONLY the question — no preamble, no explanation."
     )
 
-    client = anthropic.AsyncAnthropic(api_key=api_key)
-    message = await client.messages.create(
+    response = await call_llm(
+        messages=[{"role": "user", "content": prompt}],
         model="claude-sonnet-4-5",
         max_tokens=200,
-        messages=[{"role": "user", "content": prompt}],
     )
-    opening_question = message.content[0].text.strip()
+    opening_question = response.text.strip()
 
     db = get_db()
     history_id = await _save_history(

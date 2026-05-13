@@ -19,7 +19,8 @@ _INDEX_QUERIES = [
 
 def _sync_db():
     uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-    return pymongo.MongoClient(uri)["elim"]
+    db_name = os.getenv("DATABASE_NAME", "elim")
+    return pymongo.MongoClient(uri)[db_name]
 
 
 @celery_app.task(bind=True, name="workers.indexing.index_source")
@@ -51,8 +52,9 @@ def index_source(self, user_id: str, source: str):
 
     self.update_state(state="PROGRESS", meta={"progress_pct": 45, "files_indexed": 0, "status": "embedding"})
 
-    openai_key = os.getenv("OPENAI_API_KEY")
-    if not openai_key or not raw_docs:
+    # Use Gemini for embeddings
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_key or not raw_docs:
         db.users.update_one(
             {"_id": ObjectId(user_id)},
             {"$set": {f"mcp_last_indexed.{source}": datetime.now(timezone.utc).isoformat()}},
@@ -62,7 +64,7 @@ def index_source(self, user_id: str, source: str):
     documents = [{"text": d["text"], "title": d.get("source", source)} for d in raw_docs]
 
     async def run_rag():
-        pipeline = RAGPipeline(openai_api_key=openai_key)
+        pipeline = RAGPipeline(gemini_api_key=gemini_key)
         return await pipeline.index_documents(user_id, source, documents)
 
     try:

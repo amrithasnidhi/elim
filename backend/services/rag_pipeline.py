@@ -1,5 +1,5 @@
 import os
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 from services.mcp_manager import TRUST_WEIGHTS
 
@@ -17,16 +17,18 @@ except ImportError:
     _TIKTOKEN_OK = False
 
 try:
-    from openai import AsyncOpenAI
-    _OPENAI_OK = True
+    import google.generativeai as genai
+    _GEMINI_OK = True
 except ImportError:
-    _OPENAI_OK = False
+    _GEMINI_OK = False
 
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 50
 SIMILARITY_THRESHOLD = 0.72
 TOP_K = 5
-EMBEDDING_MODEL = "text-embedding-3-small"
+# Gemini embedding model — 768 dimensions (configured via output_dimensionality)
+EMBEDDING_MODEL = "models/gemini-embedding-001"
+EMBEDDING_DIMENSIONS = 768
 BATCH_SIZE = 100
 
 
@@ -40,10 +42,11 @@ def _make_chroma_client():
 
 
 class RAGPipeline:
-    def __init__(self, openai_api_key: str):
-        if not (_CHROMA_OK and _TIKTOKEN_OK and _OPENAI_OK):
-            raise RuntimeError("chromadb, tiktoken, and openai packages are required for RAGPipeline")
-        self._openai_key = openai_api_key
+    def __init__(self, gemini_api_key: str):
+        if not (_CHROMA_OK and _TIKTOKEN_OK and _GEMINI_OK):
+            raise RuntimeError("chromadb, tiktoken, and google-generativeai packages are required for RAGPipeline")
+        self._gemini_key = gemini_api_key
+        genai.configure(api_key=gemini_api_key)
         self._enc = tiktoken.get_encoding("cl100k_base")
         self._chroma = _make_chroma_client()
 
@@ -72,13 +75,34 @@ class RAGPipeline:
     # ── Embeddings ───────────────────────────────────────────────────────────
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        client = AsyncOpenAI(api_key=self._openai_key)
+        """Embed texts using Gemini embeddings (768 dimensions)."""
         embeddings: list[list[float]] = []
         for i in range(0, len(texts), BATCH_SIZE):
             batch = texts[i : i + BATCH_SIZE]
-            resp = await client.embeddings.create(model=EMBEDDING_MODEL, input=batch)
-            embeddings.extend(item.embedding for item in resp.data)
+            # Gemini embeddings are synchronous, but we wrap for async interface
+            result = genai.embed_content(
+                model=EMBEDDING_MODEL,
+                content=batch,
+                task_type="retrieval_document",
+                output_dimensionality=EMBEDDING_DIMENSIONS,
+            )
+            # result["embedding"] is a list of embeddings when content is a list
+            if isinstance(result["embedding"][0], list):
+                embeddings.extend(result["embedding"])
+            else:
+                # Single text was passed
+                embeddings.append(result["embedding"])
         return embeddings
+
+    async def embed_query(self, query: str) -> list[float]:
+        """Embed a single query for retrieval."""
+        result = genai.embed_content(
+            model=EMBEDDING_MODEL,
+            content=query,
+            task_type="retrieval_query",
+            output_dimensionality=EMBEDDING_DIMENSIONS,
+        )
+        return result["embedding"]
 
     # ── Index ─────────────────────────────────────────────────────────────────
 
@@ -130,13 +154,13 @@ class RAGPipeline:
         if col.count() == 0:
             return []
 
-        query_emb = await self.embed_texts([topic])
+        query_emb = await self.embed_query(topic)
         sources = [s for s in (enabled_sources or []) if s != "web"]
         where = {"source": {"$in": sources}} if sources else None
 
         try:
             raw = col.query(
-                query_embeddings=query_emb,
+                query_embeddings=[query_emb],
                 n_results=min(n_results * 2, col.count()),
                 where=where,
                 include=["documents", "distances", "metadatas"],
@@ -206,7 +230,8 @@ class RAGPipeline:
 
 
 def get_rag_pipeline() -> Optional[RAGPipeline]:
-    if not (_CHROMA_OK and _TIKTOKEN_OK and _OPENAI_OK):
+    """Get RAG pipeline instance if Gemini API key is configured."""
+    if not (_CHROMA_OK and _TIKTOKEN_OK and _GEMINI_OK):
         return None
-    key = os.getenv("OPENAI_API_KEY")
-    return RAGPipeline(openai_api_key=key) if key else None
+    key = os.getenv("GEMINI_API_KEY")
+    return RAGPipeline(gemini_api_key=key) if key else None

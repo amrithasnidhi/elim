@@ -9,6 +9,7 @@ build/
 .env
 .env.local
 .env.*.local
+frontend/.env.local
 
 # Python
 __pycache__/
@@ -16,6 +17,7 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+.tmp/
 
 # IDE
 .vscode/
@@ -24,3 +26,8 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local runtime artifacts
+frontend-dev.log
+frontend-dev.err.log
+~$*.docx

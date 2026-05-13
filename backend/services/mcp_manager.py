@@ -6,18 +6,17 @@ from typing import Optional
 import anthropic
 from cryptography.fernet import Fernet, InvalidToken
 
+# MCP URLs - Slack removed (not needed for Phase 1-8)
 MCP_URLS: dict[str, str] = {
     "gdrive": "https://drivemcp.googleapis.com/mcp/v1",
     "notion": "https://mcp.notion.com/mcp",
     "github": "https://api.githubcopilot.com/mcp/",
-    "slack": "https://mcp.slack.com/mcp",
 }
 
 TRUST_WEIGHTS: dict[str, float] = {
     "gdrive": 1.0,
     "notion": 1.0,
     "github": 0.85,
-    "slack": 0.85,
     "web": 0.60,
 }
 
@@ -25,7 +24,6 @@ SOURCE_LABELS: dict[str, str] = {
     "gdrive": "Google Drive",
     "notion": "Notion",
     "github": "GitHub",
-    "slack": "Slack",
     "web": "Web Search",
 }
 
@@ -55,6 +53,14 @@ def decrypt_token(encrypted: str) -> str:
 
 
 class MCPManager:
+    """
+    MCP (Model Context Protocol) Manager for querying external knowledge sources.
+
+    Note: MCP queries require ANTHROPIC_API_KEY. If not set, queries will return empty results
+    silently. This is expected behavior when using Groq fallback for LLM - MCP features
+    won't be available but the app will still function.
+    """
+
     def __init__(self, enabled_sources: list[str], encrypted_tokens: dict[str, str]):
         self.sources = [s for s in enabled_sources if s in (*MCP_URLS.keys(), "web")]
         f = _get_fernet()
@@ -84,8 +90,14 @@ class MCPManager:
         token = self.tokens.get(source)
         if not token:
             return []
+
+        # MCP requires Anthropic API key
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        if not anthropic_key:
+            return []  # MCP not available without Anthropic
+
         try:
-            client = anthropic.AsyncAnthropic()
+            client = anthropic.AsyncAnthropic(api_key=anthropic_key)
             resp = await client.beta.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=2000,
@@ -112,8 +124,13 @@ class MCPManager:
             return []
 
     async def _web_search(self, topic: str) -> list[dict]:
+        """Web search using Anthropic's built-in tool. Requires ANTHROPIC_API_KEY."""
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        if not anthropic_key:
+            return []  # Web search not available without Anthropic
+
         try:
-            client = anthropic.AsyncAnthropic()
+            client = anthropic.AsyncAnthropic(api_key=anthropic_key)
             resp = await client.messages.create(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=1500,

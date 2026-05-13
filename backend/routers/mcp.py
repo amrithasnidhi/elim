@@ -17,7 +17,8 @@ from services.rag_pipeline import get_rag_pipeline
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 
-ALL_SOURCES = ["gdrive", "notion", "github", "slack", "web"]
+# Slack removed — not needed for Phase 1-8
+ALL_SOURCES = ["gdrive", "notion", "github", "web"]
 
 OAUTH_CONFIG: dict[str, dict] = {
     "gdrive": {
@@ -42,14 +43,6 @@ OAUTH_CONFIG: dict[str, dict] = {
         "scope": "repo read:user",
         "client_id_env": "GITHUB_CLIENT_ID",
         "client_secret_env": "GITHUB_CLIENT_SECRET",
-        "extra_params": {},
-    },
-    "slack": {
-        "auth_url": "https://slack.com/oauth/v2/authorize",
-        "token_url": "https://slack.com/api/oauth.v2.access",
-        "scope": "channels:read,channels:history,files:read",
-        "client_id_env": "SLACK_CLIENT_ID",
-        "client_secret_env": "SLACK_CLIENT_SECRET",
         "extra_params": {},
     },
 }
@@ -101,7 +94,7 @@ async def list_sources(user_id: str = Depends(get_current_user_id)):
         )
         sources.append({
             "key": src,
-            "label": SOURCE_LABELS[src],
+            "label": SOURCE_LABELS.get(src, src.title()),
             "connected": src in mcp_tokens or src == "web",
             "enabled": src in enabled,
             "configured": configured,
@@ -200,7 +193,6 @@ async def oauth_callback(
         return RedirectResponse(url=f"{frontend_url}/settings/sources?error=token_exchange_failed")
 
     token_data = resp.json()
-    # GitHub returns bot_token nested in authed_user for Slack; handle both
     access_token = (
         token_data.get("access_token")
         or token_data.get("authed_user", {}).get("access_token")
@@ -236,7 +228,7 @@ async def connect_with_token(
     body: ConnectRequest,
     user_id: str = Depends(get_current_user_id),
 ):
-    if source not in ("gdrive", "notion", "github", "slack"):
+    if source not in ("gdrive", "notion", "github"):
         raise HTTPException(status_code=400, detail="Cannot manually connect this source")
     try:
         encrypted = encrypt_token(body.token)
@@ -257,7 +249,7 @@ async def connect_with_token(
 
 @router.delete("/disconnect/{source}")
 async def disconnect_source(source: str, user_id: str = Depends(get_current_user_id)):
-    if source not in ("gdrive", "notion", "github", "slack"):
+    if source not in ("gdrive", "notion", "github"):
         raise HTTPException(status_code=400, detail="Cannot disconnect this source")
     db = get_db()
     user = await db.users.find_one({"_id": ObjectId(user_id)})
@@ -289,7 +281,7 @@ class IndexRequest(BaseModel):
 
 @router.post("/index")
 async def trigger_index(body: IndexRequest, user_id: str = Depends(get_current_user_id)):
-    if body.source not in ("gdrive", "notion", "github", "slack"):
+    if body.source not in ("gdrive", "notion", "github"):
         raise HTTPException(status_code=400, detail="Cannot index this source")
     try:
         from workers.indexing import index_source
