@@ -6,6 +6,7 @@ import DiagramView from './DiagramView'
 import ChatThread from './ChatThread'
 import ImageGrid from './ImageGrid'
 import GhostModal from './GhostModal'
+import ExportMenu from './ExportMenu'
 import useAuthStore from '../store/useAuthStore'
 
 const STYLE_META = {
@@ -75,28 +76,37 @@ export default function ExplainCard({ explanation, followup, style, topic, histo
             </span>
           )}
         </div>
-        <button
-          onClick={handleCopy}
-          className="cyber-btn-ghost"
-          style={{ display: 'flex', alignItems: 'center', gap: 5 }}
-        >
-          {copied ? (
-            <>
-              <svg width="12" height="12" fill="none" stroke="var(--green)" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              COPIED
-            </>
-          ) : (
-            <>
-              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              COPY
-            </>
-          )}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <ExportMenu
+            topic={topic}
+            style={style}
+            explanation={explanation}
+            followup={followup}
+            difficulty={user?.difficulty_level || 2}
+          />
+          <button
+            onClick={handleCopy}
+            className="cyber-btn-ghost"
+            style={{ display: 'flex', alignItems: 'center', gap: 5 }}
+          >
+            {copied ? (
+              <>
+                <svg width="12" height="12" fill="none" stroke="var(--green)" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                COPIED
+              </>
+            ) : (
+              <>
+                <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                COPY
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Explanation */}
