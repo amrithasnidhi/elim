@@ -22,9 +22,10 @@ function useClock() {
 
 const NAV_LINKS = [
   { to: '/',                label: 'INTERFACE' },
-  { to: '/compare',         label: 'COMPARE',  auth: true },
-  { to: '/history',         label: 'HISTORY',  auth: true },
-  { to: '/settings/sources',label: 'SOURCES',  auth: true },
+  { to: '/compare',         label: 'COMPARE',       auth: true },
+  { to: '/history',         label: 'HISTORY',        auth: true },
+  { to: '/settings/sources',label: 'SOURCES',        auth: true },
+  { to: '/constellation',   label: 'CONSTELLATION',  auth: true },
 ]
 
 export default function Navbar() {

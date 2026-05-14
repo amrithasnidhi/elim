@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager
 
 from database import connect_db, close_db, get_db
 from routers import explain, auth, profile, feedback, mcp, voice, images, feynman, metaphor
+from routers import constellation_router
 
 # Sentry — no-op if SENTRY_DSN is not set
 _sentry_dsn = os.getenv("SENTRY_DSN_BACKEND", "")
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI):
     await db.history.create_index([("user_id", 1), ("metaphor_domain", 1)])
     await db.aha_moments.create_index([("user_id", 1), ("created_at", -1)])
     await db.aha_moments.create_index([("user_id", 1), ("style_used", 1)])
+    await db.constellation_snapshots.create_index([("user_id", 1)], unique=True)
     yield
     await close_db()
 
@@ -125,6 +127,7 @@ app.include_router(voice.router)
 app.include_router(images.router)
 app.include_router(feynman.router)
 app.include_router(metaphor.router)
+app.include_router(constellation_router.router)
 
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(os.path.join(_static_dir, "audio"), exist_ok=True)

@@ -11,6 +11,7 @@ import Profile from './pages/Profile'
 import History from './pages/History'
 import Compare from './pages/Compare'
 import Sources from './pages/Sources'
+import ConstellationPage from './pages/ConstellationPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -74,6 +75,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Sources />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/constellation"
+            element={
+              <ProtectedRoute>
+                <ConstellationPage />
               </ProtectedRoute>
             }
           />
