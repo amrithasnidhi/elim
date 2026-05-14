@@ -5,6 +5,7 @@ import AudioPlayer from './AudioPlayer'
 import DiagramView from './DiagramView'
 import ChatThread from './ChatThread'
 import ImageGrid from './ImageGrid'
+import GhostModal from './GhostModal'
 import useAuthStore from '../store/useAuthStore'
 
 const STYLE_META = {
@@ -18,6 +19,7 @@ export default function ExplainCard({ explanation, followup, style, topic, histo
   const [copied, setCopied] = useState(false)
   const [updatedWeights, setUpdatedWeights] = useState(null)
   const [activePanel, setActivePanel] = useState(null)
+  const [showGhost, setShowGhost] = useState(false)
 
   const meta = STYLE_META[style] || { label: style?.toUpperCase(), color: 'var(--cyan)' }
 
@@ -171,19 +173,25 @@ export default function ExplainCard({ explanation, followup, style, topic, histo
                     d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               )},
-            ].map(({ key, label, icon }) => (
+              { key: 'ghost', label: 'GHOST', icon: (
+                <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              ), action: () => setShowGhost(true) },
+            ].map(({ key, label, icon, action }) => (
               <button
                 key={key}
                 type="button"
-                onClick={() => togglePanel(key)}
+                onClick={action || (() => togglePanel(key))}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 5,
                   fontFamily: "'Share Tech Mono',monospace",
                   fontSize: 9, letterSpacing: '0.12em',
                   padding: '4px 10px', borderRadius: 2,
-                  border: `1px solid ${activePanel === key ? 'rgba(0,229,255,0.4)' : 'rgba(0,229,255,0.12)'}`,
-                  background: activePanel === key ? 'rgba(0,229,255,0.08)' : 'transparent',
-                  color: activePanel === key ? 'var(--cyan)' : 'var(--sub)',
+                  border: `1px solid ${key === 'ghost' ? 'rgba(124,110,240,0.3)' : activePanel === key ? 'rgba(0,229,255,0.4)' : 'rgba(0,229,255,0.12)'}`,
+                  background: key === 'ghost' ? 'rgba(124,110,240,0.08)' : activePanel === key ? 'rgba(0,229,255,0.08)' : 'transparent',
+                  color: key === 'ghost' ? 'var(--purple)' : activePanel === key ? 'var(--cyan)' : 'var(--sub)',
                   cursor: 'pointer', transition: 'all 0.2s',
                 }}
               >
@@ -219,6 +227,14 @@ export default function ExplainCard({ explanation, followup, style, topic, histo
           </span>
         )}
       </div>
+
+      {showGhost && (
+        <GhostModal
+          historyId={historyId}
+          topic={topic}
+          onClose={() => setShowGhost(false)}
+        />
+      )}
     </div>
   )
 }
