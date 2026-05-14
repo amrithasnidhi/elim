@@ -436,12 +436,16 @@ function ConstellationCanvas({ nodes, edges, width, height, activeFilter, onNode
     simRef.current = d3.forceSimulation(simNodes)
       .force('link', d3.forceLink(simEdges)
         .id(d => d.id)
-        .distance(d => 80 + (1 - d.strength) * 80)
-        .strength(d => d.strength * 0.3))
-      .force('charge', d3.forceManyBody().strength(d => d.is_ghost ? -20 : -60 - d.size * 2))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(d => d.is_ghost ? 6 : d.size / 2 + 12))
-      .alpha(1).alphaDecay(0.015).velocityDecay(0.4)
+        .distance(d => 120 + (1 - d.strength) * 140)
+        .strength(d => d.strength * 0.18))
+      .force('charge', d3.forceManyBody()
+        .strength(d => d.is_ghost ? -40 : -120 - d.size * 4)
+        .distanceMax(500))
+      .force('center', d3.forceCenter(width / 2, height / 2).strength(0.04))
+      .force('collision', d3.forceCollide().radius(d => d.is_ghost ? 14 : d.size / 2 + 22).strength(0.8))
+      .force('x', d3.forceX(width / 2).strength(0.02))
+      .force('y', d3.forceY(height / 2).strength(0.02))
+      .alpha(1).alphaDecay(0.012).velocityDecay(0.35)
 
     return () => simRef.current?.stop()
   }, [nodes, edges, width, height])
@@ -499,7 +503,7 @@ export default function ConstellationPage() {
     const update = () => {
       if (containerRef.current) {
         const r = containerRef.current.getBoundingClientRect()
-        setDimensions({ w: Math.floor(r.width), h: Math.max(420, Math.floor(window.innerHeight - 200)) })
+        setDimensions({ w: Math.floor(r.width), h: Math.max(500, Math.floor(window.innerHeight - 160)) })
       }
     }
     update()
@@ -557,12 +561,8 @@ export default function ConstellationPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#010208', display: 'flex', flexDirection: 'column', color: '#E8F4FF', position: 'relative' }}>
-      {/* Grid background */}
-      <div style={{
-        position: 'fixed', inset: 0, zIndex: 0,
-        backgroundImage: `linear-gradient(rgba(0,229,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.03) 1px,transparent 1px)`,
-        backgroundSize: '60px 60px', pointerEvents: 'none',
-      }} />
+      {/* Block the app-level grid — space has no grid */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0, background: '#00010A', pointerEvents: 'none' }} />
 
       {/* Sub-nav */}
       <div style={{
