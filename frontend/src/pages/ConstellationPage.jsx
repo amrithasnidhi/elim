@@ -541,7 +541,7 @@ export default function ConstellationPage() {
   }, [data])
 
   const handleNodeHover  = useCallback((node, x, y) => { setHoveredNode(node); setTooltipPos({ x, y }) }, [])
-  const handleNodeClick  = useCallback(node => navigate(`/?topic=${encodeURIComponent(node.topic)}`), [navigate])
+  const handleNodeClick  = useCallback(node => navigate('/', { state: { prefillTopic: node.topic } }), [navigate])
   const handleForceRebuild = useCallback(() => {
     setLoading(true); setLoadMsg('REBUILDING UNIVERSE...')
     api.get('/constellation?force_rebuild=true')
