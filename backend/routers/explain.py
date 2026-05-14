@@ -748,7 +748,25 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
     except Exception:
         _chat_fallback[chat_key] = conversation
 
-    return {"reply": reply, "turn": len(conversation) // 2}
+    turn = len(conversation) // 2
+
+    # Aha Moment Detection
+    aha_detected = None
+    try:
+        from services.aha_detector import detect_aha_signals, record_aha_moment
+        detection = detect_aha_signals(body.question)
+        if detection["is_aha"]:
+            await record_aha_moment(
+                db, user_id, body.history_id, turn,
+                body.question, detection,
+                history.get("style_used", "unknown"),
+                topic,
+            )
+            aha_detected = detection
+    except Exception:
+        pass
+
+    return {"reply": reply, "turn": turn, "aha_detected": aha_detected}
 
 
 # ── Socratic mode ─────────────────────────────────────────────────────────────
