@@ -8,6 +8,7 @@ import DepGraph from '../components/DepGraph'
 import DiffView from '../components/DiffView'
 import TopicRecommendations from '../components/TopicRecommendations'
 import FeynmanDashboard from '../components/FeynmanDashboard'
+import ThinkingStyleCard from '../components/ThinkingStyleCard'
 import Background from '../components/Background'
 
 const STYLE_META = {
@@ -258,6 +259,9 @@ export default function Profile() {
             })}
           </div>
         </SectionCard>
+
+        {/* Metaphor Domain Fingerprint */}
+        <ThinkingStyleCard />
 
         {/* Feedback summary */}
         {summary && Object.keys(summary.per_style).length > 0 && (

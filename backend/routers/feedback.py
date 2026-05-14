@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from pydantic import BaseModel, Field
 from bson import ObjectId
 from typing import Optional
@@ -60,7 +60,7 @@ async def update_style_weights(db, user_id: str, style: str, score: int,
     summary="Rate an explanation",
     description="Submit feedback on an explanation to improve future personalization.",
 )
-async def rate_explanation(body: RateRequest, user_id: str = Depends(get_current_user_id)):
+async def rate_explanation(body: RateRequest, background_tasks: BackgroundTasks, user_id: str = Depends(get_current_user_id)):
     """
     Rate an explanation and update learning preferences.
 
@@ -107,6 +107,24 @@ async def rate_explanation(body: RateRequest, user_id: str = Depends(get_current
     updated_weights = await update_style_weights(
         db, user_id, history["style_used"], body.score, time_to_rate_sec, multi_style=is_multi
     )
+
+    async def _update_metaphor(uid: str, hid: str, score: int):
+        try:
+            from services.metaphor_fingerprint import update_fingerprint
+            history_doc = await db.history.find_one({"_id": ObjectId(hid)})
+            if not history_doc:
+                return
+            await update_fingerprint(
+                user_id=uid,
+                domain=history_doc.get("metaphor_domain", "none"),
+                feedback_score=score,
+                secondary_domain=history_doc.get("metaphor_domain_secondary"),
+                confidence=history_doc.get("metaphor_confidence", 1.0),
+            )
+        except Exception:
+            pass
+
+    background_tasks.add_task(_update_metaphor, user_id, body.history_id, body.score)
 
     # Pace Detector — auto-adjust difficulty based on rolling avg rating speed
     pace_result = None

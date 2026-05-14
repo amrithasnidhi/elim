@@ -1,7 +1,7 @@
 import json
 import re
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Depends
 from pydantic import BaseModel, Field
 from bson import ObjectId
 from typing import Optional
@@ -50,7 +50,7 @@ def _argmax_style(weights: dict) -> str:
     return max(weights, key=lambda k: weights[k])
 
 
-def _build_prompt(topic: str, style: str, difficulty: int, rag_context: str = "", code_language: str = "Python") -> str:
+def _build_prompt(topic: str, style: str, difficulty: int, rag_context: str = "", code_language: str = "Python", metaphor_hint: str = "") -> str:
     is_live_web = rag_context and ("LIVE WEB DATA" in rag_context or "TODAY'S DATE:" in rag_context)
 
     if is_live_web:
@@ -80,6 +80,8 @@ def _build_prompt(topic: str, style: str, difficulty: int, rag_context: str = ""
         else STYLE_INSTRUCTIONS[style]
     )
 
+    hint_block = f"\nMETAPHOR PREFERENCE: {metaphor_hint}" if metaphor_hint else ""
+
     return f"""You are an expert teacher with a gift for making complex topics clear.
 {context_block}
 Explain "{topic}" to a {DIFFICULTY_LABELS[difficulty]} (difficulty level {difficulty}/5).
@@ -91,7 +93,7 @@ Rules:
 - Keep the explanation focused and complete (aim for 200-400 words)
 {cite_rule}
 - End with EXACTLY one follow-up question on a new line starting with "Follow-up question: "
-
+{hint_block}
 Your explanation:"""
 
 
@@ -102,9 +104,9 @@ def _parse_response(raw: str, topic: str) -> tuple[str, str]:
     return raw.strip(), f"Can you think of a real-world example where {topic} would be applied?"
 
 
-async def _call_llm(topic: str, style: str, difficulty: int, rag_context: str = "", code_language: str = "Python") -> dict:
+async def _call_llm(topic: str, style: str, difficulty: int, rag_context: str = "", code_language: str = "Python", metaphor_hint: str = "") -> dict:
     """Single async LLM call with fallback. Scores quality and retries once if avg < 3.0."""
-    prompt = _build_prompt(topic, style, difficulty, rag_context, code_language)
+    prompt = _build_prompt(topic, style, difficulty, rag_context, code_language, metaphor_hint)
 
     for attempt in range(MAX_QUALITY_RETRIES):
         try:
@@ -282,6 +284,7 @@ async def _load_mcp_context(user: dict, topic: str) -> tuple[str, list[str], lis
 )
 async def generate_explanation(
     body: ExplainRequest,
+    background_tasks: BackgroundTasks,
     user_id: Optional[str] = Depends(get_optional_user_id),
 ):
     """
@@ -326,7 +329,16 @@ async def generate_explanation(
             rag_context = web_ctx + ("\n\n" + rag_context if rag_context else "")
 
     lang = (body.code_language or "Python").strip() or "Python"
-    result = await _call_llm(body.topic, effective_style, effective_difficulty, rag_context, lang)
+
+    metaphor_hint = ""
+    if user_id:
+        try:
+            from services.metaphor_fingerprint import get_domain_prompt_hint
+            metaphor_hint = await get_domain_prompt_hint(user_id)
+        except Exception:
+            pass
+
+    result = await _call_llm(body.topic, effective_style, effective_difficulty, rag_context, lang, metaphor_hint)
     if result["error"]:
         raise HTTPException(status_code=502, detail=f"LLM API error: {result['error']}")
 
@@ -339,6 +351,25 @@ async def generate_explanation(
             rag_chunks=[{"text": c["text"][:400], "source": c["source"]} for c in rag_chunks],
             quality_scores=result.get("quality"),
         )
+
+        async def _tag_domain(explanation_text: str, hid: str):
+            try:
+                from services.metaphor_fingerprint import extract_domain
+                domain_result = await extract_domain(explanation_text)
+                await db.history.update_one(
+                    {"_id": ObjectId(hid)},
+                    {"$set": {
+                        "metaphor_domain":           domain_result.get("primary_domain", "none"),
+                        "metaphor_domain_secondary": domain_result.get("secondary_domain"),
+                        "metaphor_evidence":         domain_result.get("evidence", ""),
+                        "metaphor_confidence":       domain_result.get("confidence", 1.0),
+                    }},
+                )
+            except Exception:
+                pass
+
+        background_tasks.add_task(_tag_domain, result["explanation"], history_id)
+
         await db.users.update_one(
             {"_id": ObjectId(user_id)},
             {
