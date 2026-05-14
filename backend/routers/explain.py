@@ -178,8 +178,8 @@ class ExplainRequest(BaseModel):
     topic: str = Field(
         ...,
         min_length=1,
-        max_length=500,
-        description="The topic or concept to explain",
+        max_length=5000,
+        description="The topic or concept to explain. Can be a short topic name or longer text/notes to explain.",
         examples=["recursion", "binary search", "machine learning"],
     )
     style: Optional[str] = Field(
@@ -748,14 +748,32 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
     except Exception:
         _chat_fallback[chat_key] = conversation
 
-    return {"reply": reply, "turn": len(conversation) // 2}
+    turn = len(conversation) // 2
+
+    # Aha Moment Detection
+    aha_detected = None
+    try:
+        from services.aha_detector import detect_aha_signals, record_aha_moment
+        detection = detect_aha_signals(body.question)
+        if detection["is_aha"]:
+            await record_aha_moment(
+                db, user_id, body.history_id, turn,
+                body.question, detection,
+                history.get("style_used", "unknown"),
+                topic,
+            )
+            aha_detected = detection
+    except Exception:
+        pass
+
+    return {"reply": reply, "turn": turn, "aha_detected": aha_detected}
 
 
 # ── Socratic mode ─────────────────────────────────────────────────────────────
 
 class SocraticRequest(BaseModel):
     """Request to start a Socratic learning session."""
-    topic: str = Field(..., min_length=1, max_length=500, description="Topic to explore through Socratic dialogue")
+    topic: str = Field(..., min_length=1, max_length=5000, description="Topic to explore through Socratic dialogue")
     difficulty: Optional[int] = Field(default=2, ge=1, le=5, description="Student's knowledge level")
 
 

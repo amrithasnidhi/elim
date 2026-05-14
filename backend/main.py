@@ -47,6 +47,8 @@ async def lifespan(app: FastAPI):
     await db.feynman_results.create_index([("user_id", 1), ("created_at", -1)])
     await db.feynman_results.create_index([("user_id", 1), ("topic", 1)])
     await db.feynman_results.create_index("history_id")
+    await db.aha_moments.create_index([("user_id", 1), ("created_at", -1)])
+    await db.aha_moments.create_index([("user_id", 1), ("style_used", 1)])
     yield
     await close_db()
 

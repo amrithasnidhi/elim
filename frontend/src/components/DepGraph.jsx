@@ -43,13 +43,16 @@ function TopicPill({ topic, explored, onClick }) {
 }
 
 export default function DepGraph({ topic, onTopicSelect }) {
+  // Truncate long topics - dependency graph is for short concept names
+  const shortTopic = topic?.length > 100 ? topic.slice(0, 100).split(' ').slice(0, -1).join(' ') : topic
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['dependencies', topic],
-    queryFn: () => api.get('/profile/dependencies', { params: { topic } }).then((r) => r.data),
-    enabled: !!topic,
+    queryKey: ['dependencies', shortTopic],
+    queryFn: () => api.get('/profile/dependencies', { params: { topic: shortTopic } }).then((r) => r.data),
+    enabled: !!shortTopic && shortTopic.length < 200,
   })
 
-  if (!topic) return null
+  if (!topic || topic.length > 500) return null
 
   if (isLoading) {
     return (
@@ -133,7 +136,7 @@ export default function DepGraph({ topic, onTopicSelect }) {
               fontSize: 11, fontWeight: 700, color: 'var(--cyan)',
               lineHeight: 1.2,
             }}>
-              {topic.toUpperCase()}
+              {shortTopic?.toUpperCase()}
             </p>
           </div>
           {data.related.length > 0 && (

@@ -8,6 +8,7 @@ import DepGraph from '../components/DepGraph'
 import DiffView from '../components/DiffView'
 import TopicRecommendations from '../components/TopicRecommendations'
 import FeynmanDashboard from '../components/FeynmanDashboard'
+import BreakthroughProfile from '../components/BreakthroughProfile'
 import Background from '../components/Background'
 
 const STYLE_META = {
@@ -224,6 +225,9 @@ export default function Profile() {
 
         {/* Feynman Mastery + Gaps */}
         <FeynmanDashboard />
+
+        {/* Breakthrough Profile (Aha Moments) */}
+        <BreakthroughProfile />
 
         {/* Style weights */}
         <SectionCard title="STYLE_WEIGHT_MATRIX" subtitle="EVOLVES AUTOMATICALLY AS YOU RATE EXPLANATIONS">
