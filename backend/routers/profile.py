@@ -178,6 +178,38 @@ async def concept_dependencies(
 
 # ── Explanation Diff ──────────────────────────────────────────────────────────
 
+@router.get("/history/topic-timeline")
+async def topic_timeline(
+    topic: str = Query(..., description="Topic to get timeline for"),
+    current_id: str = Query(..., description="Current history_id to exclude"),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Get all past explanations for a topic (Explanation Ghost feature)."""
+    db = get_db()
+    try:
+        current_oid = ObjectId(current_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid current_id")
+
+    cursor = db.history.find({
+        "user_id": ObjectId(user_id),
+        "topic": {"$regex": f"^{topic}$", "$options": "i"},
+        "_id": {"$ne": current_oid},
+    }).sort("created_at", -1).limit(20)
+
+    items = []
+    async for doc in cursor:
+        items.append({
+            "id": str(doc["_id"]),
+            "topic": doc["topic"],
+            "style_used": doc["style_used"],
+            "difficulty_used": doc["difficulty_used"],
+            "created_at": doc["created_at"].isoformat() if doc.get("created_at") else None,
+        })
+
+    return {"items": items, "count": len(items)}
+
+
 @router.get("/history/diff")
 async def history_diff(
     h1: str = Query(..., description="First history_id"),
@@ -235,3 +267,49 @@ async def topic_recommendations(
     db = get_db()
     recs = await get_recommendations(db, user_id, limit=limit)
     return {"recommendations": recs}
+
+
+# ── Breakthrough Profile (Aha Moment Analysis) ────────────────────────────────
+
+@router.get("/breakthrough-profile")
+async def breakthrough_profile(user_id: str = Depends(get_current_user_id)):
+    """
+    Get user's breakthrough profile based on detected aha moments.
+
+    Returns insights like:
+    - Best style for breakthroughs
+    - Average turns before understanding clicks
+    - Personalized learning recommendations
+    """
+    from services.aha_detector import get_breakthrough_profile, get_optimal_sequence
+    db = get_db()
+    profile = await get_breakthrough_profile(db, user_id)
+    profile["optimal_sequence"] = await get_optimal_sequence(db, user_id)
+    return profile
+
+
+@router.get("/aha-moments")
+async def list_aha_moments(
+    limit: int = Query(default=20, ge=1, le=100),
+    user_id: str = Depends(get_current_user_id),
+):
+    """List recent aha moments for visualization."""
+    db = get_db()
+    cursor = db.aha_moments.find(
+        {"user_id": ObjectId(user_id)}
+    ).sort("created_at", -1).limit(limit)
+
+    items = []
+    async for doc in cursor:
+        items.append({
+            "id": str(doc["_id"]),
+            "history_id": str(doc["history_id"]),
+            "turn_number": doc["turn_number"],
+            "message": doc["message"],
+            "confidence": doc["confidence"],
+            "style_used": doc["style_used"],
+            "topic": doc["topic"],
+            "created_at": doc["created_at"].isoformat() if doc.get("created_at") else None,
+        })
+
+    return {"items": items, "count": len(items)}
