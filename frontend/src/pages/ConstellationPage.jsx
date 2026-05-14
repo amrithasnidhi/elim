@@ -259,84 +259,160 @@ function ConstellationCanvas({ nodes, edges, width, height, activeFilter, onNode
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     const W = canvas.width, H = canvas.height
-    ctx.clearRect(0, 0, W, H)
+    const t = tickRef.current
 
-    // Static star field
-    ctx.fillStyle = 'rgba(255,255,255,0.1)'
-    for (let i = 0; i < 180; i++) {
-      const sx = (i * 137.5 + 23) % W
-      const sy = (i * 73.1  + 47) % H
-      ctx.beginPath()
-      ctx.arc(sx, sy, i % 3 === 0 ? 0.7 : 0.35, 0, Math.PI * 2)
-      ctx.fill()
-    }
+    // ── Deep space background ───────────────────────────────────────────────
+    ctx.fillStyle = '#00010A'
+    ctx.fillRect(0, 0, W, H)
 
-    // Edges
+    // Nebula clouds — static radial blobs for depth
+    const nebulae = [
+      { x: W * 0.15, y: H * 0.25, r: W * 0.22, c: 'rgba(60,20,120,0.09)' },
+      { x: W * 0.80, y: H * 0.70, r: W * 0.28, c: 'rgba(0,40,100,0.10)' },
+      { x: W * 0.55, y: H * 0.15, r: W * 0.18, c: 'rgba(80,10,60,0.07)' },
+      { x: W * 0.30, y: H * 0.80, r: W * 0.20, c: 'rgba(10,60,80,0.08)' },
+    ]
+    nebulae.forEach(({ x, y, r, c }) => {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+      g.addColorStop(0, c)
+      g.addColorStop(1, 'transparent')
+      ctx.fillStyle = g
+      ctx.fillRect(0, 0, W, H)
+    })
+
+    // Background star field — 3 layers
+    const starLayers = [
+      { count: 300, maxR: 0.5,  alpha: 0.35, colors: ['255,255,255', '200,210,255', '255,220,200'] },
+      { count: 120, maxR: 0.9,  alpha: 0.55, colors: ['255,255,255', '180,200,255'] },
+      { count: 40,  maxR: 1.4,  alpha: 0.80, colors: ['255,255,255', '255,240,200'] },
+    ]
+    starLayers.forEach(({ count, maxR, alpha, colors }) => {
+      for (let i = 0; i < count; i++) {
+        const sx   = ((i * 137.508 + 53.3) * (maxR * 100 + 7)) % W
+        const sy   = ((i * 97.345  + 19.7) * (maxR * 100 + 13)) % H
+        const twinkle = alpha * (0.6 + 0.4 * Math.sin(t * 0.012 + i * 2.39))
+        const col  = colors[i % colors.length]
+        ctx.beginPath()
+        ctx.arc(sx, sy, maxR * (0.4 + (i % 5) * 0.12), 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(${col},${twinkle})`
+        ctx.fill()
+      }
+    })
+
+    // ── Constellation edges ─────────────────────────────────────────────────
     edgesRef.current.forEach(e => {
       const src = nodesRef.current.find(n => n.id === e.source)
       const tgt = nodesRef.current.find(n => n.id === e.target)
       if (!src || !tgt || !visibleIds.has(src.id) || !visibleIds.has(tgt.id)) return
+      const alpha = e.strength * 0.22 + 0.03
+      const grad  = ctx.createLinearGradient(src.x, src.y, tgt.x, tgt.y)
+      grad.addColorStop(0, `rgba(0,180,255,${alpha})`)
+      grad.addColorStop(0.5, `rgba(120,80,255,${alpha * 0.7})`)
+      grad.addColorStop(1, `rgba(0,180,255,${alpha})`)
       ctx.beginPath()
       ctx.moveTo(src.x, src.y)
       ctx.lineTo(tgt.x, tgt.y)
-      ctx.strokeStyle = `rgba(0,229,255,${e.strength * 0.18 + 0.04})`
-      ctx.lineWidth   = e.strength * 1.2 + 0.3
+      ctx.strokeStyle = grad
+      ctx.lineWidth   = e.strength * 1.5 + 0.3
       ctx.stroke()
     })
 
-    const t = tickRef.current
+    // ── Stars ───────────────────────────────────────────────────────────────
     nodesRef.current.forEach(n => {
       if (!visibleIds.has(n.id)) return
       const x = n.x || W / 2
       const y = n.y || H / 2
-      const r = n.is_ghost ? 4 : n.size / 2
+      const r = n.is_ghost ? 3.5 : n.size / 2
 
       if (n.is_ghost) {
+        // Ghost — dashed orbit ring + faint dot
+        ctx.save()
+        ctx.globalAlpha = 0.25 + 0.1 * Math.sin(t * 0.03 + x)
         ctx.beginPath()
-        ctx.setLineDash([3, 4])
-        ctx.arc(x, y, r + 1, 0, Math.PI * 2)
-        ctx.strokeStyle = 'rgba(255,255,255,0.2)'
-        ctx.lineWidth = 0.8
+        ctx.setLineDash([2, 5])
+        ctx.arc(x, y, r + 3, 0, Math.PI * 2)
+        ctx.strokeStyle = 'rgba(140,160,200,0.6)'
+        ctx.lineWidth = 0.7
         ctx.stroke()
         ctx.setLineDash([])
         ctx.beginPath()
         ctx.arc(x, y, r, 0, Math.PI * 2)
-        ctx.fillStyle = 'rgba(255,255,255,0.1)'
+        ctx.fillStyle = 'rgba(160,180,220,0.2)'
         ctx.fill()
-      } else {
-        if (n.is_supernova) {
-          const pulse = r + 3 + Math.sin(t * 0.05) * 3
+        ctx.restore()
+        return
+      }
+
+      const twinkle  = n.brightness * (0.85 + 0.15 * Math.sin(t * 0.018 + x * 0.1))
+      const color    = n.color
+
+      // Outer atmospheric glow
+      const atmR = r * 4.5
+      const atm  = ctx.createRadialGradient(x, y, 0, x, y, atmR)
+      atm.addColorStop(0,   `${color}${Math.round(twinkle * 28).toString(16).padStart(2, '0')}`)
+      atm.addColorStop(0.4, `${color}${Math.round(twinkle * 12).toString(16).padStart(2, '0')}`)
+      atm.addColorStop(1,   'transparent')
+      ctx.beginPath()
+      ctx.arc(x, y, atmR, 0, Math.PI * 2)
+      ctx.fillStyle = atm
+      ctx.fill()
+
+      // Supernova double pulse ring
+      if (n.is_supernova) {
+        const p1 = r + 4 + Math.sin(t * 0.06) * 4
+        const p2 = r + 10 + Math.sin(t * 0.06 + Math.PI) * 4
+        ;[p1, p2].forEach((p, i) => {
           ctx.beginPath()
-          ctx.arc(x, y, pulse, 0, Math.PI * 2)
-          ctx.strokeStyle = `rgba(255,215,0,${0.25 + Math.sin(t * 0.05) * 0.1})`
-          ctx.lineWidth = 1.5
+          ctx.arc(x, y, p, 0, Math.PI * 2)
+          ctx.strokeStyle = `rgba(255,200,0,${(0.35 - i * 0.12) * twinkle})`
+          ctx.lineWidth = i === 0 ? 1.5 : 0.8
           ctx.stroke()
-        }
+        })
+      }
 
-        const grad = ctx.createRadialGradient(x, y, 0, x, y, r * 2.5)
-        grad.addColorStop(0, `${n.color}${Math.round(n.brightness * 40).toString(16).padStart(2, '0')}`)
-        grad.addColorStop(1, 'transparent')
-        ctx.beginPath()
-        ctx.arc(x, y, r * 2.5, 0, Math.PI * 2)
-        ctx.fillStyle = grad
-        ctx.fill()
+      // Star body with limb darkening
+      const core = ctx.createRadialGradient(x, y, 0, x, y, r)
+      core.addColorStop(0,   `rgba(255,255,255,${twinkle * 0.95})`)
+      core.addColorStop(0.3, `${color}${Math.round(twinkle * 245).toString(16).padStart(2, '0')}`)
+      core.addColorStop(0.8, `${color}${Math.round(twinkle * 180).toString(16).padStart(2, '0')}`)
+      core.addColorStop(1,   `${color}${Math.round(twinkle * 80).toString(16).padStart(2, '0')}`)
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fillStyle = core
+      ctx.fill()
 
-        ctx.beginPath()
-        ctx.arc(x, y, r, 0, Math.PI * 2)
-        ctx.fillStyle = `${n.color}${Math.round(n.brightness * 255).toString(16).padStart(2, '0')}`
-        ctx.fill()
+      // Diffraction spikes for bright stars (r > 8)
+      if (r > 8) {
+        const spikeLen = r * 2.8
+        const spikeAlpha = twinkle * 0.45
+        ctx.save()
+        ctx.globalAlpha = spikeAlpha
+        ctx.strokeStyle = color
+        ctx.lineWidth   = 0.8
+        ;[0, Math.PI / 2, Math.PI / 4, -Math.PI / 4].forEach(angle => {
+          ctx.beginPath()
+          ctx.moveTo(x + Math.cos(angle) * r, y + Math.sin(angle) * r)
+          ctx.lineTo(x + Math.cos(angle) * spikeLen, y + Math.sin(angle) * spikeLen)
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.moveTo(x - Math.cos(angle) * r, y - Math.sin(angle) * r)
+          ctx.lineTo(x - Math.cos(angle) * spikeLen, y - Math.sin(angle) * spikeLen)
+          ctx.stroke()
+        })
+        ctx.restore()
+      }
 
-        ctx.beginPath()
-        ctx.arc(x, y, r * 0.4, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(255,255,255,${n.brightness * 0.8})`
-        ctx.fill()
-
-        if (r > 7) {
-          ctx.font = `${Math.round(9 + r * 0.3)}px 'Share Tech Mono', monospace`
-          ctx.fillStyle = `rgba(200,196,232,${n.brightness * 0.8})`
-          ctx.textAlign = 'center'
-          ctx.fillText(n.topic.slice(0, 22), x, y + r + 13)
-        }
+      // Label — only for r > 6, positioned below
+      if (r > 6) {
+        const label    = n.topic.length > 20 ? n.topic.slice(0, 18) + '…' : n.topic
+        const fontSize = Math.round(8 + r * 0.25)
+        ctx.font       = `${fontSize}px 'Share Tech Mono', monospace`
+        ctx.textAlign  = 'center'
+        // Shadow for readability
+        ctx.fillStyle  = 'rgba(0,0,8,0.7)'
+        ctx.fillText(label, x + 1, y + r + 14)
+        ctx.fillStyle  = `rgba(180,195,230,${twinkle * 0.75})`
+        ctx.fillText(label, x, y + r + 13)
       }
     })
 
