@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 
 from database import connect_db, close_db, get_db
 from routers import explain, auth, profile, feedback, mcp, voice, images, feynman, metaphor
-from routers import constellation_router
+from routers import constellation_router, peer_teaching
 
 # Sentry — no-op if SENTRY_DSN is not set
 _sentry_dsn = os.getenv("SENTRY_DSN_BACKEND", "")
@@ -52,6 +52,11 @@ async def lifespan(app: FastAPI):
     await db.aha_moments.create_index([("user_id", 1), ("created_at", -1)])
     await db.aha_moments.create_index([("user_id", 1), ("style_used", 1)])
     await db.constellation_snapshots.create_index([("user_id", 1)], unique=True)
+    await db.peer_sessions.create_index([("session_id", 1)], unique=True)
+    await db.peer_sessions.create_index([("teacher_id", 1), ("created_at", -1)])
+    await db.peer_sessions.create_index([("learner_id", 1), ("created_at", -1)])
+    await db.peer_sessions.create_index([("topic", 1), ("status", 1)])
+    await db.notifications.create_index([("user_id", 1), ("read", 1), ("created_at", -1)])
     yield
     await close_db()
 
@@ -128,6 +133,8 @@ app.include_router(images.router)
 app.include_router(feynman.router)
 app.include_router(metaphor.router)
 app.include_router(constellation_router.router)
+app.include_router(peer_teaching.router)
+app.include_router(peer_teaching.ws_router)
 
 _static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(os.path.join(_static_dir, "audio"), exist_ok=True)

@@ -34,5 +34,9 @@ celery_app.conf.update(
             "task": "workers.peer_matching.run_peer_matching",
             "schedule": crontab(day_of_week=1, hour=2, minute=0),
         },
+        "peer-match-sweep": {
+            "task": "workers.peer_matching.sweep_peer_queues",
+            "schedule": crontab(minute="*/10"),
+        },
     },
 )
