@@ -12,6 +12,7 @@ import History from './pages/History'
 import Compare from './pages/Compare'
 import Sources from './pages/Sources'
 import ConstellationPage from './pages/ConstellationPage'
+import PeerTeachingPage from './pages/PeerTeachingPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -83,6 +84,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ConstellationPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/peer"
+            element={
+              <ProtectedRoute>
+                <PeerTeachingPage />
               </ProtectedRoute>
             }
           />

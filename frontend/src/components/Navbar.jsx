@@ -26,6 +26,7 @@ const NAV_LINKS = [
   { to: '/history',         label: 'HISTORY',        auth: true },
   { to: '/settings/sources',label: 'SOURCES',        auth: true },
   { to: '/constellation',   label: 'CONSTELLATION',  auth: true },
+  { to: '/peer',            label: 'PEER_NETWORK',   auth: true },
 ]
 
 export default function Navbar() {
