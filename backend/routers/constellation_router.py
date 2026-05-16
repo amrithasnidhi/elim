@@ -1,11 +1,15 @@
+import logging
+import traceback
 from datetime import datetime, timezone
 
 from bson import ObjectId
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from database import get_db
 from dependencies import get_current_user_id
 from services.constellation import build_constellation
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/constellation", tags=["constellation"])
 
@@ -63,7 +67,11 @@ async def get_constellation(
                     _cache[user_id] = {"data": last, "ts": datetime.now(timezone.utc)}
                     return last
 
-    data = await build_constellation(user_id)
+    try:
+        data = await build_constellation(user_id)
+    except Exception as exc:
+        log.error("build_constellation failed for %s: %s", user_id, traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Constellation build failed: {exc}")
     _cache[user_id] = {"data": data, "ts": datetime.now(timezone.utc)}
 
     if background_tasks:

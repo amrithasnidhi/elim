@@ -190,7 +190,7 @@ async def build_node(
     )
 
     return {
-        "id":           topic_key,
+        "id":           key,
         "topic":        topic,
         "domain":       domain,
         "color":        DOMAIN_COLORS.get(domain, DOMAIN_COLORS["general"]),
