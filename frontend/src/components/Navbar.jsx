@@ -27,6 +27,7 @@ const NAV_LINKS = [
   { to: '/settings/sources',label: 'SOURCES',        auth: true },
   { to: '/constellation',   label: 'CONSTELLATION',  auth: true },
   { to: '/peer',            label: 'PEER_NETWORK',   auth: true },
+  { to: '/profile/learning',label: 'WHAT_ELIM_KNOWS',auth: true },
 ]
 
 export default function Navbar() {

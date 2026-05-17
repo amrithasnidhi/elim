@@ -288,6 +288,24 @@ async def breakthrough_profile(user_id: str = Depends(get_current_user_id)):
     return profile
 
 
+@router.get("/learning")
+async def get_learning_profile(
+    include_prompt_block: bool = False,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    Returns 'What ELIM has learned about you' — the rendered Personal Pedagogy
+    Profile, with one claim per signal and an evidence count behind each claim.
+    """
+    db = get_db()
+    from services.pedagogy_profile import build_profile, render_for_display, render_for_prompt
+    profile = await build_profile(user_id, db)
+    payload = render_for_display(profile)
+    if include_prompt_block:
+        payload["prompt_block"] = render_for_prompt(profile)
+    return payload
+
+
 @router.get("/aha-moments")
 async def list_aha_moments(
     limit: int = Query(default=20, ge=1, le=100),

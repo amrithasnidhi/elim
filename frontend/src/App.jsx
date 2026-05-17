@@ -13,6 +13,7 @@ import Compare from './pages/Compare'
 import Sources from './pages/Sources'
 import ConstellationPage from './pages/ConstellationPage'
 import PeerTeachingPage from './pages/PeerTeachingPage'
+import LearningProfile from './pages/LearningProfile'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -92,6 +93,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <PeerTeachingPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/learning"
+            element={
+              <ProtectedRoute>
+                <LearningProfile />
               </ProtectedRoute>
             }
           />

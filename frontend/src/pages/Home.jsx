@@ -9,6 +9,7 @@ import SocraticChat from '../components/SocraticChat'
 import FeynmanTest from '../components/FeynmanTest'
 import LogoOrbit from '../components/LogoOrbit'
 import Background from '../components/Background'
+import ShaderStarRain from '../components/ShaderStarRain'
 import useAuthStore from '../store/useAuthStore'
 
 const STYLES = [
@@ -126,7 +127,8 @@ export default function Home() {
   ]
 
   return (
-    <div style={{ minHeight: '100vh', position: 'relative' }}>
+    <div style={{ minHeight: '100vh', position: 'relative', background: '#000' }}>
+      <ShaderStarRain intensity={1.0} density={36} speed={0.45} angleDeg={215} />
       <Background />
       <div style={{ position: 'relative', zIndex: 1, maxWidth: 720, margin: '0 auto', padding: '3rem 1.5rem 4rem' }}>
 

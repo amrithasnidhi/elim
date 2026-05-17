@@ -50,7 +50,7 @@ def _argmax_style(weights: dict) -> str:
     return max(weights, key=lambda k: weights[k])
 
 
-def _build_prompt(topic: str, style: str, difficulty: int, rag_context: str = "", code_language: str = "Python", metaphor_hint: str = "") -> str:
+def _build_prompt(topic: str, style: str, difficulty: int, rag_context: str = "", code_language: str = "Python", metaphor_hint: str = "", pedagogy_block: str = "") -> str:
     is_live_web = rag_context and ("LIVE WEB DATA" in rag_context or "TODAY'S DATE:" in rag_context)
 
     if is_live_web:
@@ -81,9 +81,10 @@ def _build_prompt(topic: str, style: str, difficulty: int, rag_context: str = ""
     )
 
     hint_block = f"\nMETAPHOR PREFERENCE: {metaphor_hint}" if metaphor_hint else ""
+    ppp_block = f"\n{pedagogy_block}\n" if pedagogy_block else ""
 
     return f"""You are an expert teacher with a gift for making complex topics clear.
-{context_block}
+{ppp_block}{context_block}
 Explain "{topic}" to a {DIFFICULTY_LABELS[difficulty]} (difficulty level {difficulty}/5).
 
 Style instruction: {style_instruction}
@@ -104,9 +105,9 @@ def _parse_response(raw: str, topic: str) -> tuple[str, str]:
     return raw.strip(), f"Can you think of a real-world example where {topic} would be applied?"
 
 
-async def _call_llm(topic: str, style: str, difficulty: int, rag_context: str = "", code_language: str = "Python", metaphor_hint: str = "") -> dict:
+async def _call_llm(topic: str, style: str, difficulty: int, rag_context: str = "", code_language: str = "Python", metaphor_hint: str = "", pedagogy_block: str = "") -> dict:
     """Single async LLM call with fallback. Scores quality and retries once if avg < 3.0."""
-    prompt = _build_prompt(topic, style, difficulty, rag_context, code_language, metaphor_hint)
+    prompt = _build_prompt(topic, style, difficulty, rag_context, code_language, metaphor_hint, pedagogy_block)
 
     for attempt in range(MAX_QUALITY_RETRIES):
         try:
@@ -338,7 +339,19 @@ async def generate_explanation(
         except Exception:
             pass
 
-    result = await _call_llm(body.topic, effective_style, effective_difficulty, rag_context, lang, metaphor_hint)
+    # Personal Pedagogy Profile injection — the same Claude API call yields
+    # different shape per learner because of this block. Empty when there is
+    # not enough evidence (new user) so we don't fabricate claims.
+    pedagogy_block = ""
+    if user_id:
+        try:
+            from services.pedagogy_profile import build_profile, render_for_prompt
+            ppp = await build_profile(user_id, db)
+            pedagogy_block = render_for_prompt(ppp)
+        except Exception:
+            pedagogy_block = ""
+
+    result = await _call_llm(body.topic, effective_style, effective_difficulty, rag_context, lang, metaphor_hint, pedagogy_block)
     if result["error"]:
         raise HTTPException(status_code=502, detail=f"LLM API error: {result['error']}")
 
