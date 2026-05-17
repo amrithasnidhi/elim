@@ -606,6 +606,74 @@ async def get_my_sessions(limit: int = 10, user_id: str = Depends(get_current_us
     return out
 
 
+@router.get("/dev/mastery")
+async def dev_get_mastery(user_id: str = Depends(get_current_user_id)):
+    """DEV: returns the raw topic_mastery for the logged-in user. Diagnostic."""
+    db = get_db()
+    user_doc = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user_doc:
+        return {"error": "user not found", "user_id": user_id}
+    mastery = user_doc.get("topic_mastery", {})
+    return {
+        "user_id":       user_id,
+        "email":         user_doc.get("email"),
+        "topic_count":   len(mastery),
+        "topic_mastery": {k: (v if isinstance(v, dict) else {"_raw": str(v)}) for k, v in mastery.items()},
+    }
+
+
+@router.post("/dev/seed-my-account")
+async def dev_seed_my_account(
+    flavor: Optional[str] = None,
+    user_id: str = Depends(get_current_user_id),
+):
+    """
+    DEV: seeds the CURRENTLY LOGGED-IN user with peer-matching topics.
+    Idempotent. Two flavors so two accounts mirror each other:
+      flavor="a" → teach: binary_search/recursion/DP    | learn: kubernetes/graphs/linalg
+      flavor="b" → teach: kubernetes/graphs/linalg      | learn: binary_search/recursion/DP
+    If flavor is omitted, auto-detects from email (anything with "partner" or "test" → b).
+    """
+    db = get_db()
+    user_doc = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    email = (user_doc.get("email") or "").lower()
+    if flavor not in ("a", "b"):
+        flavor = "b" if any(t in email for t in ("partner", "test", "peer_")) else "a"
+
+    set_a = [("binary search", 92), ("recursion", 91), ("dynamic programming", 88),
+             ("kubernetes",    25), ("graph algorithms", 18), ("linear algebra", 30)]
+    set_b = [("binary search", 28), ("recursion", 22), ("dynamic programming", 18),
+             ("kubernetes",    93), ("graph algorithms", 90), ("linear algebra", 87)]
+    pairs = set_a if flavor == "a" else set_b
+
+    update = {}
+    for topic, score in pairs:
+        key = _topic_key(topic)
+        update[f"topic_mastery.{key}.score"]       = score
+        update[f"topic_mastery.{key}.sessions"]    = 3
+        update[f"topic_mastery.{key}.last_tested"] = datetime.now(timezone.utc)
+
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update})
+
+    user_doc = await db.users.find_one({"_id": ObjectId(user_id)})
+    mastery = user_doc.get("topic_mastery", {})
+    teach = sum(1 for v in mastery.values() if isinstance(v, dict) and v.get("score", 0) >= TEACHER_SCORE_MIN)
+    learn = sum(1 for v in mastery.values() if isinstance(v, dict) and v.get("score", 100) <= LEARNER_SCORE_MAX)
+
+    return {
+        "ok":            True,
+        "email":         email,
+        "flavor":        flavor,
+        "topics_seeded": len(pairs),
+        "teach_now":     teach,
+        "learn_now":     learn,
+        "msg":           "Refresh /peer to see TEACH and LEARN populated.",
+    }
+
+
 @router.get("/eligible-topics")
 async def get_eligible_topics(user_id: str = Depends(get_current_user_id)):
     db = get_db()

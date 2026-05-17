@@ -244,17 +244,35 @@ function DiscoveryScreen({ onRequest, onResume }) {
   const [history,  setHistory]  = useState([])
   const [tab,      setTab]      = useState('teach')
   const [loading,  setLoading]  = useState(true)
+  const [errors,   setErrors]   = useState([])
 
   useEffect(() => {
-    Promise.all([
-      api.get('/peer/eligible-topics'),
-      api.get('/peer/waiting-count'),
-      api.get('/peer/sessions'),
-    ])
-      .then(([el, wc, hs]) => {
-        setEligible(el.data); setWaiting(wc.data); setHistory(hs.data); setLoading(false)
+    const calls = [
+      ['eligible-topics', () => api.get('/peer/eligible-topics')],
+      ['waiting-count',   () => api.get('/peer/waiting-count')],
+      ['sessions',        () => api.get('/peer/sessions')],
+    ]
+    Promise.allSettled(calls.map(([, fn]) => fn()))
+      .then(results => {
+        const errs = []
+        results.forEach((r, i) => {
+          const [name] = calls[i]
+          if (r.status === 'fulfilled') {
+            const d = r.value.data
+            if (name === 'eligible-topics') setEligible(d)
+            if (name === 'waiting-count')   setWaiting(d)
+            if (name === 'sessions')        setHistory(d)
+          } else {
+            const status = r.reason?.response?.status || 'NETWORK'
+            const detail = r.reason?.response?.data?.detail || r.reason?.message || 'unknown'
+            errs.push(`${name}: ${status} — ${detail}`)
+            // eslint-disable-next-line no-console
+            console.error(`[peer] ${name} failed`, r.reason)
+          }
+        })
+        setErrors(errs)
+        setLoading(false)
       })
-      .catch(() => setLoading(false))
   }, [])
 
   const tabs = [
@@ -298,6 +316,22 @@ function DiscoveryScreen({ onRequest, onResume }) {
             }}>{t.label}</button>
         ))}
       </div>
+
+      {errors.length > 0 && (
+        <div style={{
+          marginBottom: '1rem', padding: '0.75rem 1rem',
+          background: 'rgba(216,90,48,0.08)',
+          border: '1px solid rgba(216,90,48,0.4)',
+          borderLeft: `3px solid ${T.coral}`, borderRadius: 2,
+        }}>
+          <Label color={T.coral} size={9}>// API_ERRORS — check backend logs</Label>
+          {errors.map((e, i) => (
+            <div key={i} className="peer-mono" style={{ fontSize: 11, color: T.coral, letterSpacing: '0.04em', marginTop: 2 }}>
+              {e}
+            </div>
+          ))}
+        </div>
+      )}
 
       {loading ? <ScanBar /> : tab === 'teach' ? (
         eligible.can_teach.length === 0 ? (

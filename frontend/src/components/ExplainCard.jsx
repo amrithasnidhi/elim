@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import ThumbsRating from './ThumbsRating'
 import AudioPlayer from './AudioPlayer'
@@ -7,6 +8,9 @@ import ChatThread from './ChatThread'
 import ImageGrid from './ImageGrid'
 import GhostModal from './GhostModal'
 import ExportMenu from './ExportMenu'
+import QuizPanel from './QuizPanel'
+import ReexplainPanel from './ReexplainPanel'
+import SocraticLauncher from './SocraticLauncher'
 import useAuthStore from '../store/useAuthStore'
 
 const STYLE_META = {
@@ -17,6 +21,7 @@ const STYLE_META = {
 
 export default function ExplainCard({ explanation, followup, style, topic, historyId, displayTimeUtc, quality }) {
   const user = useAuthStore((s) => s.user)
+  const navigate = useNavigate()
   const [copied, setCopied] = useState(false)
   const [updatedWeights, setUpdatedWeights] = useState(null)
   const [activePanel, setActivePanel] = useState(null)
@@ -150,74 +155,76 @@ export default function ExplainCard({ explanation, followup, style, topic, histo
         </div>
       )}
 
-      {/* Action bar */}
-      {historyId && user && (
-        <div style={{ padding: '0 1.5rem 0.5rem' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            borderTop: '1px solid rgba(0,229,255,0.06)',
-            paddingTop: '0.75rem',
-          }}>
-            {[
-              { key: 'images', label: 'IMAGES', icon: (
-                <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 16M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              )},
-              { key: 'audio', label: 'LISTEN', icon: (
-                <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M15.536 8.464a5 5 0 010 7.072M12 6a7 7 0 010 12M8.464 8.464a5 5 0 000 7.072" />
-                </svg>
-              )},
-              { key: 'diagram', label: 'DIAGRAM', icon: (
-                <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-                </svg>
-              )},
-              { key: 'chat', label: 'FOLLOW_UP', icon: (
-                <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              )},
-              { key: 'ghost', label: 'GHOST', icon: (
-                <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              ), action: () => setShowGhost(true) },
-            ].map(({ key, label, icon, action }) => (
+      {/* Action bar — always rendered. Buttons that need historyId/login show a hint when clicked. */}
+      <div style={{ padding: '0 1.5rem 0.5rem' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap',
+          borderTop: '1px solid rgba(0,229,255,0.06)',
+          paddingTop: '0.75rem',
+        }}>
+          {[
+            // Row 1 — original
+            { key: 'images',   label: 'IMAGES',     accent: 'cyan',   needs: 'topic' },
+            { key: 'audio',    label: 'LISTEN',     accent: 'cyan',   needs: 'explanation' },
+            { key: 'diagram',  label: 'DIAGRAM',    accent: 'cyan',   needs: 'history' },
+            { key: 'chat',     label: 'FOLLOW_UP',  accent: 'cyan',   needs: 'history' },
+            { key: 'ghost',    label: 'GHOST',      accent: 'purple', needs: 'history', action: () => setShowGhost(true) },
+            // Row 2 — new advanced
+            { key: 'quiz',     label: 'QUIZ_ME',    accent: 'green',  needs: 'history' },
+            { key: 'simplify', label: 'SIMPLIFY ↓', accent: 'cyan',   needs: 'history' },
+            { key: 'deepen',   label: 'DEEPEN ↑',   accent: 'purple', needs: 'history' },
+            { key: 'socratic', label: 'SOCRATIC',   accent: 'amber',  needs: 'login' },
+          ].map(({ key, label, accent, needs, action }) => {
+            const accentVar = { cyan: 'var(--cyan)', purple: 'var(--purple)', green: 'var(--green)', amber: 'var(--amber)' }[accent]
+            const accentRGB = { cyan: '0,229,255', purple: '124,110,240', green: '0,255,157', amber: '245,166,35' }[accent]
+            const active = activePanel === key
+            const disabled = (needs === 'history' && !historyId) || (needs === 'login' && !user)
+            return (
               <button
                 key={key}
                 type="button"
-                onClick={action || (() => togglePanel(key))}
+                title={disabled ? (needs === 'history' ? 'Generate an explanation first' : 'Log in to use this') : ''}
+                onClick={() => {
+                  if (disabled) {
+                    if (needs === 'login') { navigate('/auth/login'); return }
+                    toast.error('GENERATE AN EXPLANATION FIRST')
+                    return
+                  }
+                  if (action) { action(); return }
+                  togglePanel(key)
+                }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 5,
                   fontFamily: "'Share Tech Mono',monospace",
                   fontSize: 9, letterSpacing: '0.12em',
                   padding: '4px 10px', borderRadius: 2,
-                  border: `1px solid ${key === 'ghost' ? 'rgba(124,110,240,0.3)' : activePanel === key ? 'rgba(0,229,255,0.4)' : 'rgba(0,229,255,0.12)'}`,
-                  background: key === 'ghost' ? 'rgba(124,110,240,0.08)' : activePanel === key ? 'rgba(0,229,255,0.08)' : 'transparent',
-                  color: key === 'ghost' ? 'var(--purple)' : activePanel === key ? 'var(--cyan)' : 'var(--sub)',
-                  cursor: 'pointer', transition: 'all 0.2s',
+                  border: `1px solid ${active ? accentVar : disabled ? 'rgba(255,255,255,0.06)' : `rgba(${accentRGB},0.25)`}`,
+                  background: active ? `rgba(${accentRGB},0.10)` : disabled ? 'transparent' : 'transparent',
+                  color: active ? accentVar : disabled ? 'var(--dim)' : 'var(--sub)',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  opacity: disabled ? 0.45 : 1, transition: 'all 0.15s',
                 }}
+                onMouseEnter={e => { if (!disabled) { e.currentTarget.style.color = accentVar; e.currentTarget.style.borderColor = accentVar } }}
+                onMouseLeave={e => { if (!disabled && !active) { e.currentTarget.style.color = 'var(--sub)'; e.currentTarget.style.borderColor = `rgba(${accentRGB},0.25)` } }}
               >
-                {icon}
                 {label}
               </button>
-            ))}
-          </div>
-          <div style={{ paddingTop: '0.75rem' }}>
-            {activePanel === 'images'  && <ImageGrid   topic={topic} />}
-            {activePanel === 'audio'   && <AudioPlayer text={explanation} />}
-            {activePanel === 'diagram' && <DiagramView historyId={historyId} />}
-            {activePanel === 'chat'    && <ChatThread  historyId={historyId} topic={topic} />}
-          </div>
+            )
+          })}
         </div>
-      )}
+        <div style={{ paddingTop: '0.75rem' }}>
+          {activePanel === 'images'   && <ImageGrid     topic={topic} />}
+          {activePanel === 'audio'    && <AudioPlayer   text={explanation} />}
+          {activePanel === 'diagram'  && historyId && <DiagramView  historyId={historyId} />}
+          {activePanel === 'chat'     && historyId && <ChatThread   historyId={historyId} topic={topic} />}
+          {activePanel === 'quiz'     && historyId && <QuizPanel    historyId={historyId} />}
+          {activePanel === 'simplify' && historyId && <ReexplainPanel historyId={historyId} direction="simplify" />}
+          {activePanel === 'deepen'   && historyId && <ReexplainPanel historyId={historyId} direction="deepen" />}
+          {activePanel === 'socratic' && user && (
+            <SocraticLauncher topic={topic} difficulty={user?.difficulty_level || 2} />
+          )}
+        </div>
+      </div>
 
       {/* Rating footer */}
       <div style={{

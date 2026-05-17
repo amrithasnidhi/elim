@@ -802,6 +802,147 @@ async def followup_chat(body: FollowupRequest, user_id: str = Depends(get_curren
 
 # ── Socratic mode ─────────────────────────────────────────────────────────────
 
+class QuizRequest(BaseModel):
+    """Generate a 3-question multiple-choice quiz from an existing explanation."""
+    history_id: str = Field(..., description="History entry to quiz on")
+    n: int = Field(default=3, ge=1, le=6, description="How many questions to generate")
+
+
+class ReexplainRequest(BaseModel):
+    """Re-explain a topic at a different difficulty level."""
+    history_id: str = Field(..., description="Original explanation to riff on")
+    direction: str = Field(..., pattern="^(simplify|deepen)$", description="simplify | deepen")
+
+
+_QUIZ_PROMPT = """Generate a {n}-question multiple-choice quiz from this explanation of "{topic}".
+Each question has exactly 4 options, one correct. Vary question type: recall, application, edge case.
+
+---EXPLANATION---
+{explanation}
+---END---
+
+Return ONLY a JSON array — no preamble, no markdown fences:
+[
+  {{
+    "question": "<question text>",
+    "options": ["A", "B", "C", "D"],
+    "correct_index": <0-3>,
+    "explanation": "<one-sentence why the correct answer is right>"
+  }}
+]
+"""
+
+
+@router.post(
+    "/quiz",
+    summary="Generate a quick quiz",
+    description="Generate a multiple-choice quiz from a previous explanation.",
+)
+async def generate_quiz(body: QuizRequest, user_id: str = Depends(get_current_user_id)):
+    if not is_llm_available():
+        raise HTTPException(status_code=500, detail="No LLM provider configured")
+
+    db = get_db()
+    try:
+        h = await db.history.find_one({"_id": ObjectId(body.history_id), "user_id": ObjectId(user_id)})
+    except Exception:
+        h = None
+    if not h:
+        raise HTTPException(status_code=404, detail="History entry not found")
+
+    prompt = _QUIZ_PROMPT.format(
+        n=body.n, topic=h.get("topic", "the topic"),
+        explanation=(h.get("explanation") or "")[:4000],
+    )
+    resp = await call_llm(
+        messages=[{"role": "user", "content": prompt}],
+        model="claude-haiku-4-5-20251001",
+        max_tokens=900,
+    )
+    raw = resp.text.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+    try:
+        questions = json.loads(raw)
+    except Exception:
+        raise HTTPException(status_code=502, detail="LLM returned malformed quiz JSON")
+
+    cleaned = []
+    for q in questions[: body.n]:
+        opts = q.get("options") or []
+        if len(opts) != 4:
+            continue
+        ci = int(q.get("correct_index", 0))
+        ci = max(0, min(3, ci))
+        cleaned.append({
+            "question":      str(q.get("question", "")).strip()[:500],
+            "options":       [str(o).strip()[:200] for o in opts],
+            "correct_index": ci,
+            "explanation":   str(q.get("explanation", "")).strip()[:400],
+        })
+    if not cleaned:
+        raise HTTPException(status_code=502, detail="Could not parse any valid questions")
+
+    return {"topic": h.get("topic"), "questions": cleaned}
+
+
+@router.post(
+    "/reexplain",
+    summary="Re-explain at different difficulty",
+    description="Generate a simpler or deeper version of an existing explanation.",
+)
+async def reexplain(body: ReexplainRequest, user_id: str = Depends(get_current_user_id)):
+    if not is_llm_available():
+        raise HTTPException(status_code=500, detail="No LLM provider configured")
+
+    db = get_db()
+    try:
+        h = await db.history.find_one({"_id": ObjectId(body.history_id), "user_id": ObjectId(user_id)})
+    except Exception:
+        h = None
+    if not h:
+        raise HTTPException(status_code=404, detail="History entry not found")
+
+    topic = h.get("topic", "")
+    old_difficulty = int(h.get("difficulty_level", 2))
+    if body.direction == "simplify":
+        new_difficulty = max(1, old_difficulty - 1)
+        nudge = (
+            "Re-explain SIMPLER. Use one concrete analogy. Avoid jargon completely. "
+            "If you must use a term, define it inline with the simplest possible synonym."
+        )
+    else:
+        new_difficulty = min(5, old_difficulty + 1)
+        nudge = (
+            "Re-explain DEEPER. Add the underlying mechanism. Mention one common misconception "
+            "and one edge case. Keep it precise — no padding."
+        )
+
+    style = h.get("style", "analogy")
+    prompt = (
+        f'Topic: "{topic}".  Audience: {DIFFICULTY_LABELS.get(new_difficulty, "intermediate learner")}.\n'
+        f"Style hint: {STYLE_INSTRUCTIONS.get(style, '')}\n\n"
+        f"{nudge}\n\n"
+        f"Original explanation for context (do NOT just paraphrase it — rewrite for the new audience):\n"
+        f"---\n{(h.get('explanation') or '')[:2500]}\n---\n\n"
+        f"Return ONLY the new explanation — 3-6 short paragraphs."
+    )
+    resp = await call_llm(
+        messages=[{"role": "user", "content": prompt}],
+        model="claude-sonnet-4-5",
+        max_tokens=800,
+    )
+
+    return {
+        "topic":          topic,
+        "explanation":    resp.text.strip(),
+        "from_difficulty": old_difficulty,
+        "to_difficulty":   new_difficulty,
+        "direction":       body.direction,
+        "style":           style,
+    }
+
+
 class SocraticRequest(BaseModel):
     """Request to start a Socratic learning session."""
     topic: str = Field(..., min_length=1, max_length=5000, description="Topic to explore through Socratic dialogue")
