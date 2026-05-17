@@ -1,6 +1,45 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
+
+// One-time prose typography for explanation bodies — eye-strain fix only,
+// doesn't touch the cyberpunk theme. ::first-letter and p+p margin can't be
+// expressed as inline styles, so they live in this injected stylesheet.
+function injectProseCSS() {
+  if (typeof document === 'undefined' || document.getElementById('elim-prose-css')) return
+  const s = document.createElement('style')
+  s.id = 'elim-prose-css'
+  s.textContent = `
+    .elim-prose {
+      color: #C8D8E8;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 16.5px;
+      font-weight: 500;
+      line-height: 1.85;
+      letter-spacing: 0.01em;
+    }
+    .elim-prose p { margin: 0; }
+    .elim-prose p + p { margin-top: 20px; }
+    .elim-prose p:first-child::first-letter {
+      font-size: 1.45em;
+      font-weight: 600;
+      color: #5DCAA5;
+      float: left;
+      margin-right: 4px;
+      margin-top: 4px;
+      line-height: 1;
+    }
+    .elim-followup-text {
+      color: #A8C4C8;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1.65;
+      letter-spacing: 0.01em;
+    }
+  `
+  document.head.appendChild(s)
+}
 import ThumbsRating from './ThumbsRating'
 import AudioPlayer from './AudioPlayer'
 import DiagramView from './DiagramView'
@@ -28,6 +67,15 @@ export default function ExplainCard({ explanation, followup, style, topic, histo
   const [showGhost, setShowGhost] = useState(false)
 
   const meta = STYLE_META[style] || { label: style?.toUpperCase(), color: 'var(--cyan)' }
+
+  useEffect(() => { injectProseCSS() }, [])
+
+  // Split on blank-line boundaries so paragraph spacing has something to grip.
+  // Treat any "blank line" (incl. lines with only whitespace) as a paragraph break.
+  const paragraphs = (explanation || '')
+    .split(/\n\s*\n/)
+    .map(p => p.replace(/\n/g, ' ').trim())
+    .filter(Boolean)
 
   const handleCopy = () => {
     navigator.clipboard.writeText(explanation)
@@ -115,27 +163,23 @@ export default function ExplainCard({ explanation, followup, style, topic, histo
       </div>
 
       {/* Explanation */}
-      <div style={{ padding: '1.5rem' }}>
-        <p style={{
-          color: 'var(--text)', lineHeight: 1.75,
-          whiteSpace: 'pre-wrap', fontSize: 15,
-          fontFamily: "'Rajdhani',sans-serif",
-        }}>
-          {explanation}
-        </p>
+      <div className="elim-prose" style={{ padding: '1.5rem' }}>
+        {paragraphs.map((p, i) => (
+          <p key={i}>{p}</p>
+        ))}
       </div>
 
       {/* Follow-up */}
       {followup && (
         <div style={{
           margin: '0 1.5rem 1rem',
-          padding: '1rem',
-          background: 'rgba(124,110,240,0.06)',
-          border: '1px solid rgba(124,110,240,0.2)',
+          padding: '1rem 1.1rem',
+          background: 'rgba(93,202,165,0.07)',
+          borderLeft: '2px solid rgba(93,202,165,0.5)',
           borderRadius: 2,
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-            <svg width="14" height="14" fill="none" stroke="var(--purple)" viewBox="0 0 24 24" style={{ flexShrink: 0, marginTop: 2 }}>
+            <svg width="14" height="14" fill="none" stroke="#5DCAA5" viewBox="0 0 24 24" style={{ flexShrink: 0, marginTop: 4 }}>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -143,11 +187,11 @@ export default function ExplainCard({ explanation, followup, style, topic, histo
               <p style={{
                 fontFamily: "'Share Tech Mono',monospace",
                 fontSize: 9, letterSpacing: '0.16em',
-                color: 'var(--purple)', marginBottom: 6,
+                color: '#5DCAA5', marginBottom: 6,
               }}>
                 CHECK_YOUR_UNDERSTANDING
               </p>
-              <p style={{ color: 'rgba(232,244,255,0.8)', fontSize: 14, lineHeight: 1.6 }}>
+              <p className="elim-followup-text" style={{ margin: 0 }}>
                 {followup}
               </p>
             </div>

@@ -53,12 +53,11 @@ export default function ReexplainPanel({ historyId, direction }) {
           DIFFICULTY {data.from_difficulty} → {data.to_difficulty}
         </span>
       </div>
-      <p style={{
-        fontFamily: "'Rajdhani',sans-serif", fontSize: 15,
-        color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap',
-      }}>
-        {data.explanation}
-      </p>
+      <div className="elim-prose">
+        {(data.explanation || '').split(/\n\s*\n/).map(p => p.replace(/\n/g, ' ').trim()).filter(Boolean).map((p, i) => (
+          <p key={i}>{p}</p>
+        ))}
+      </div>
     </div>
   )
 }
